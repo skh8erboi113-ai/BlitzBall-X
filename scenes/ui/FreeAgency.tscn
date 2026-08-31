@@ -1,0 +1,104 @@
+[gd_scene load_steps=2 format=3 uid="uid://dpx8y4m1k2v7a"]
+
+[ext_resource type="Script" path="res://scripts/ui/free_agency.gd" id="1_fa"]
+
+[node name="FreeAgency" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_fa")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.01, 0.04, 0.09, 1)
+
+[node name="TopBar" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 70.0
+grow_horizontal = 2
+
+[node name="Title" type="Label" parent="TopBar"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -20.0
+offset_right = 200.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 26
+text = "SCOUTING & FREE AGENCY"
+horizontal_alignment = 1
+
+[node name="BudgetLabel" type="Label" parent="TopBar"]
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -15.0
+offset_right = -30.0
+offset_bottom = 15.0
+grow_horizontal = 0
+grow_vertical = 2
+theme_override_font_sizes/font_size = 18
+text = "BUDGET: 10000 Gil"
+horizontal_alignment = 2
+
+[node name="BackButton" type="Button" parent="TopBar"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 15.0
+offset_right = 110.0
+offset_bottom = 55.0
+text = "BACK"
+
+[node name="MainPanel" type="HSplitContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -540.0
+offset_top = -220.0
+offset_right = 540.0
+offset_bottom = 240.0
+grow_horizontal = 2
+grow_vertical = 2
+split_offset = 550
+
+[node name="AgentList" type="ItemList" parent="MainPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+
+[node name="RightSide" type="VBoxContainer" parent="MainPanel"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="DetailsLabel" type="RichTextLabel" parent="MainPanel/RightSide"]
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+
+[node name="SignButton" type="Button" parent="MainPanel/RightSide"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "SIGN CONTRACT"
