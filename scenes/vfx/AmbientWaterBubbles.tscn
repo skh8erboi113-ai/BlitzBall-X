@@ -1,0 +1,31 @@
+[gd_scene load_steps=5 format=3 uid="uid://dm0y3u8y1g4c2"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bubble"]
+transparency = 1
+albedo_color = Color(0.8, 0.95, 1, 0.35)
+roughness = 0.1
+emission_enabled = true
+emission = Color(0.2, 0.6, 1, 1)
+emission_energy_multiplier = 0.4
+
+[sub_resource type="SphereMesh" id="SphereMesh_ambient_bubble"]
+material = SubResource("StandardMaterial3D_bubble")
+radius = 0.12
+height = 0.24
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_ambient"]
+emission_shape = 1
+emission_sphere_radius = 28.0
+direction = Vector3(0, 1, 0)
+spread = 35.0
+initial_velocity_min = 0.2
+initial_velocity_max = 0.8
+gravity = Vector3(0, 0.4, 0)
+
+[node name="AmbientWaterBubbles" type="GPUParticles3D"]
+amount = 180
+lifetime = 6.0
+preprocess = 2.0
+visibility_aabb = AABB(-30, -30, -30, 60, 60, 60)
+process_material = SubResource("ParticleProcessMaterial_ambient")
+draw_pass_1 = SubResource("SphereMesh_ambient_bubble")
