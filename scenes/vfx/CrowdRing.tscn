@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://dm0y3u8y1g4q8"]
+
+[ext_resource type="Script" path="res://scripts/match/crowd_simulation.gd" id="1_crowd"]
+
+[node name="CrowdRing" type="Node3D"]
+script = ExtResource("1_crowd")
