@@ -1,66 +1,31 @@
 ; Engine configuration file.
-; It's best edited using the editor UI and not directly,
-; but can be created initially.
-
 config_version=5
 
 [application]
-
 config/name="Blitzball 2K"
-run/main_scene="res://scenes/match/BlitzballMatch.tscn"
+run/main_scene="res://MainMenu.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
-config/icon="res://icon.svg"
 
 [autoload]
-
-GameManager="*res://autoload/game_manager.gd"
-TeamDatabase="*res://autoload/team_database.gd"
+SettingsManager="*res://settings_manager.gd"
+GameManager="*res://game_manager.gd"
+TeamDatabase="*res://team_database.gd"
 
 [display]
-
 window/size/viewport_width=1920
 window/size/viewport_height=1080
-window/size/mode=0
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
 [input]
-
-move_forward={
-"deadzone": 0.2,
-"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":87,"key_label":0,"unicode":119,"location":0,"echo":false,"script":null)
-]
-}
-move_back={
-"deadzone": 0.2,
-"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":83,"key_label":0,"unicode":115,"location":0,"echo":false,"script":null)
-]
-}
-move_left={
-"deadzone": 0.2,
-"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":65,"key_label":0,"unicode":97,"location":0,"echo":false,"script":null)
-]
-}
-move_right={
-"deadzone": 0.2,
-"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":68,"key_label":0,"unicode":100,"location":0,"echo":false,"script":null)
-]
-}
-swim_up={
-"deadzone": 0.2,
-"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":32,"key_label":0,"unicode":32,"location":0,"echo":false,"script":null)
-]
-}
-swim_down={
-"deadzone": 0.2,
-"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194326,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
-]
-}
-sprint={
-"deadzone": 0.2,
-"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194325,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
-]
-}
-shoot={
-"deadzone": 0.2,
-"events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"
+move_forward={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":87)]}
+move_back={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":83)]}
+move_left={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":65)]}
+move_right={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":68)]}
+swim_up={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":32)]}
+swim_down={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":4194326)]}
+sprint={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":4194325)]}
+shoot={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":74)]}
+pass={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":75)]}
+tackle={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":76)]}
+switch_player={"deadzone": 0.2,"events": [Object(InputEventKey,"physical_keycode":4194306)]}
