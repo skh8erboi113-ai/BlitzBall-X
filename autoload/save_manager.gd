@@ -3,16 +3,17 @@ extends Node
 const SAVE_FILE_PATH: String = "user://blitzball_save.json"
 
 func save_game(season_data: Dictionary, franchise_data: Dictionary) -> bool:
+	var s_mgr = get_node_or_null("/root/SettingsManager")
 	var save_payload := {
 		"version": 1.0,
 		"timestamp": Time.get_unix_time_from_system(),
 		"season": season_data,
 		"franchise": franchise_data,
 		"settings": {
-			"quality": SettingsManager.quality_preset,
-			"target_fps": SettingsManager.target_fps,
-			"fullscreen": SettingsManager.is_fullscreen,
-			"volume": SettingsManager.master_volume
+			"quality": s_mgr.quality_preset if s_mgr else "medium",
+			"target_fps": s_mgr.target_fps if s_mgr else 60,
+			"fullscreen": s_mgr.is_fullscreen if s_mgr else false,
+			"volume": s_mgr.master_volume if s_mgr else 1.0
 		}
 	}
 
