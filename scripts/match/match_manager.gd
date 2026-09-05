@@ -1,16 +1,16 @@
 class_name MatchManager
 extends Node3D
 
-@onready var arena: BlitzballArena = $BlitzballArena
-@onready var ball: BlitzballBall = $Ball
-@onready var camera: MatchCamera = $Camera3D
+@onready var arena: Node3D = $BlitzballArena
+@onready var ball: RigidBody3D = $Ball
+@onready var camera: Camera3D = $Camera3D
 @onready var hud: CanvasLayer = $HUD
 
-var home_team: BlitzballTeamData
-var away_team: BlitzballTeamData
-var home_players: Array[BlitzballPlayer] = []
-var away_players: Array[BlitzballPlayer] = []
-var user_player: BlitzballPlayer = null
+var home_team: Resource
+var away_team: Resource
+var home_players: Array = []
+var away_players: Array = []
+var user_player: Node3D = null
 
 var home_score: int = 0
 var away_score: int = 0
@@ -26,7 +26,7 @@ func _ready() -> void:
 	_spawn_team(away_team, false)
 
 	if ball:
-		ball.goal_scored.connect(_on_goal_scored)
+		ball.connect("goal_scored", _on_goal_scored)
 
 	_setup_user_player()
 	is_match_active = true
@@ -37,8 +37,8 @@ func _process(delta: float) -> void:
 		if Input.is_action_just_pressed("switch_player"):
 			_switch_user_player()
 
-func _spawn_team(team_data: BlitzballTeamData, is_home: bool) -> void:
-	var player_scene := preload("res://scenes/match/Player.tscn")
+func _spawn_team(team_data: Resource, is_home: bool) -> void:
+	var player_scene := preload("res://Player.tscn")
 	var sign_mult: float = -1.0 if is_home else 1.0
 
 	var positions_offset := [
@@ -50,11 +50,12 @@ func _spawn_team(team_data: BlitzballTeamData, is_home: bool) -> void:
 		Vector3(sign_mult * -8.0, -3.0, 5.0)    # RF
 	]
 
-	for i in range(mini(team_data.roster.size(), 6)):
-		var p: BlitzballPlayer = player_scene.instantiate()
-		p.player_data = team_data.roster[i]
-		p.is_home_team = is_home
-		p.ball_ref = ball
+	var team_roster: Array = team_data.get("roster")
+	for i in range(mini(team_roster.size(), 6)):
+		var p = player_scene.instantiate()
+		p.set("player_data", team_roster[i])
+		p.set("is_home_team", is_home)
+		p.set("ball_ref", ball)
 		add_child(p)
 		p.global_position = positions_offset[i]
 
@@ -66,27 +67,27 @@ func _spawn_team(team_data: BlitzballTeamData, is_home: bool) -> void:
 func _setup_user_player() -> void:
 	if not home_players.is_empty():
 		user_player = home_players[0]
-		user_player.is_user_controlled = true
+		user_player.set("is_user_controlled", true)
 		if camera:
-			camera.target = user_player
+			camera.set("target", user_player)
 
 func _switch_user_player() -> void:
 	if home_players.is_empty():
 		return
 	var idx := home_players.find(user_player)
-	user_player.is_user_controlled = false
+	user_player.set("is_user_controlled", false)
 	idx = (idx + 1) % home_players.size()
 	user_player = home_players[idx]
-	user_player.is_user_controlled = true
+	user_player.set("is_user_controlled", true)
 	if camera:
-		camera.target = user_player
+		camera.set("target", user_player)
 
-func get_teammates(player: BlitzballPlayer) -> Array[BlitzballPlayer]:
-	return home_players if player.is_home_team else away_players
+func get_teammates(player: Node3D) -> Array:
+	return home_players if player.get("is_home_team") else away_players
 
-func get_ball_carrier() -> BlitzballPlayer:
-	if ball and ball.is_held and ball.holder is BlitzballPlayer:
-		return ball.holder as BlitzballPlayer
+func get_ball_carrier() -> Node3D:
+	if ball and ball.get("is_held") and ball.get("holder") != null:
+		return ball.get("holder") as Node3D
 	return null
 
 func _on_goal_scored(is_home_goal: bool, _shooter: Node3D) -> void:
@@ -96,4 +97,4 @@ func _on_goal_scored(is_home_goal: bool, _shooter: Node3D) -> void:
 		home_score += 1
 	ball.global_position = Vector3.ZERO
 	ball.linear_velocity = Vector3.ZERO
-	ball.release_ball()
+	ball.call("release_ball")
