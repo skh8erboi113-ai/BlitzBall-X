@@ -1,0 +1,186 @@
+import { emptyInput } from '../game/entities.js';
+
+/**
+ * Keyboard + gamepad input mapped into the sim's input struct.
+ *
+ * Keyboard:  WASD/Arrows move · SHIFT turbo · J/Space shoot (hold & release) ·
+ *            K pass (K+turbo = alley-oop) · L trick / steal · I shove · U jump/block ·
+ *            Q switch player · E gamebreaker · ESC pause
+ * Gamepad:   Left stick move · RT/RB turbo · A/Cross shoot · X/Square pass ·
+ *            B/Circle trick/steal · Y/Triangle shove · LB switch · LT+RT gamebreaker · Start pause
+ */
+export class InputManager {
+  constructor() {
+    this.keys = new Set();
+    this.input = emptyInput();
+    this.pressed = new Set(); // edge-triggered this frame
+    this.released = new Set();
+    this.padPrev = {};
+    this.onPause = null;
+    this.enabled = true;
+    this.lastDevice = 'keyboard';
+    this.moveVec = { x: 0, z: 0 };
+
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      const k = e.code;
+      this.keys.add(k);
+      this.lastDevice = 'keyboard';
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(k)) e.preventDefault();
+      // Escape toggles pause during a match. When the pause handler consumes the key we must
+      // NOT also register it as an edge, otherwise the pause menu reads it as "back" and resumes.
+      if (k === 'Escape' && this.onPause && this.onPause()) return;
+      this.pressed.add(k);
+    });
+    window.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      this.released.add(e.code);
+    });
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+    });
+  }
+
+  down(...codes) {
+    return codes.some((c) => this.keys.has(c));
+  }
+
+  justPressed(...codes) {
+    return codes.some((c) => this.pressed.has(c));
+  }
+
+  justReleased(...codes) {
+    return codes.some((c) => this.released.has(c));
+  }
+
+  /** Read the current frame's input into a struct suitable for MatchSim.setUserInput. */
+  poll() {
+    const i = this.input;
+    let mx = 0;
+    let mz = 0;
+    if (this.down('KeyA', 'ArrowLeft')) mx -= 1;
+    if (this.down('KeyD', 'ArrowRight')) mx += 1;
+    if (this.down('KeyW', 'ArrowUp')) mz -= 1;
+    if (this.down('KeyS', 'ArrowDown')) mz += 1;
+    let turbo = this.down('ShiftLeft', 'ShiftRight');
+    let shootHeld = this.down('KeyJ', 'Space');
+    let shootPressed = this.justPressed('KeyJ', 'Space');
+    let shootReleased = this.justReleased('KeyJ', 'Space');
+    let pass = this.justPressed('KeyK');
+    let trick = this.justPressed('KeyL');
+    let shove = this.justPressed('KeyI');
+    let jump = this.justPressed('KeyU');
+    let switchPlayer = this.justPressed('KeyQ', 'Tab');
+    let gamebreaker = this.justPressed('KeyE');
+    let pause = false;
+
+    // Gamepad
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const pad = pads && Array.from(pads).find((p) => p && p.connected);
+    if (pad) {
+      const dz = 0.18;
+      const ax = pad.axes[0] || 0;
+      const az = pad.axes[1] || 0;
+      if (Math.abs(ax) > dz || Math.abs(az) > dz) {
+        mx = ax;
+        mz = az;
+        this.lastDevice = 'gamepad';
+      }
+      const b = (n) => !!(pad.buttons[n] && pad.buttons[n].pressed);
+      const edge = (n) => {
+        const now = b(n);
+        const was = !!this.padPrev[n];
+        this.padPrev[n] = now;
+        return now && !was;
+      };
+      const edgeUp = (n) => {
+        const now = b(n);
+        const was = !!this.padPrev['u' + n];
+        this.padPrev['u' + n] = now;
+        return !now && was;
+      };
+      // Standard mapping: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 9 Start, 12-15 dpad
+      if (b(7) || b(5)) turbo = true;
+      const aNow = b(0);
+      if (aNow) shootHeld = true;
+      if (edge(0)) shootPressed = true;
+      if (edgeUp(0)) shootReleased = true;
+      if (edge(2)) pass = true;
+      if (edge(1)) trick = true;
+      if (edge(3)) shove = true;
+      if (edge(4)) switchPlayer = true;
+      if (b(6) && b(7) && edge(6)) gamebreaker = true;
+      if (b(6) && edge(7)) gamebreaker = true;
+      if (edge(9)) pause = true;
+      if (b(12)) mz = -1;
+      if (b(13)) mz = 1;
+      if (b(14)) mx = -1;
+      if (b(15)) mx = 1;
+      if (edge(14) || edge(15)) {
+        /* d-pad reserved */
+      }
+      if (pad.buttons.some((x) => x.pressed)) this.lastDevice = 'gamepad';
+    }
+    if (pause && this.onPause) this.onPause();
+
+    const len = Math.hypot(mx, mz);
+    if (len > 1) {
+      mx /= len;
+      mz /= len;
+    }
+    i.moveX = mx;
+    i.moveZ = mz;
+    i.turbo = turbo;
+    i.shoot = shootHeld;
+    i.shootPressed = shootPressed;
+    i.shootReleased = shootReleased;
+    i.pass = pass;
+    i.trick = trick;
+    i.shove = shove;
+    i.jump = jump;
+    i.switchPlayer = switchPlayer;
+    i.gamebreaker = gamebreaker;
+    this.pressed.clear();
+    this.released.clear();
+    return i;
+  }
+
+  /** Menu navigation helpers (edge-triggered). */
+  menuPoll() {
+    const out = { up: false, down: false, left: false, right: false, confirm: false, back: false };
+    out.up = this.justPressed('KeyW', 'ArrowUp');
+    out.down = this.justPressed('KeyS', 'ArrowDown');
+    out.left = this.justPressed('KeyA', 'ArrowLeft');
+    out.right = this.justPressed('KeyD', 'ArrowRight');
+    out.confirm = this.justPressed('Enter', 'Space', 'KeyJ');
+    out.back = this.justPressed('Escape', 'Backspace', 'KeyK');
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const pad = pads && Array.from(pads).find((p) => p && p.connected);
+    if (pad) {
+      const b = (n) => !!(pad.buttons[n] && pad.buttons[n].pressed);
+      const edge = (n) => {
+        const now = b(n);
+        const was = !!this.padPrev['m' + n];
+        this.padPrev['m' + n] = now;
+        return now && !was;
+      };
+      const axisEdge = (idx, dir) => {
+        const v = pad.axes[idx] || 0;
+        const now = dir < 0 ? v < -0.6 : v > 0.6;
+        const key = 'ax' + idx + dir;
+        const was = !!this.padPrev[key];
+        this.padPrev[key] = now;
+        return now && !was;
+      };
+      if (edge(12) || axisEdge(1, -1)) out.up = true;
+      if (edge(13) || axisEdge(1, 1)) out.down = true;
+      if (edge(14) || axisEdge(0, -1)) out.left = true;
+      if (edge(15) || axisEdge(0, 1)) out.right = true;
+      if (edge(0) || edge(9)) out.confirm = true;
+      if (edge(1)) out.back = true;
+    }
+    this.pressed.clear();
+    this.released.clear();
+    return out;
+  }
+}
