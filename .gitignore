@@ -1,7 +1,19 @@
-# Godot 4 specific ignores
-.godot/
-*.translation
-*.import
-export_presets.cfg
+# Node
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+
+# Test artifacts
+screenshots/
+*.log
+
+# OS / editor
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
+
+# Legacy Godot prototype (removed)
+.godot/
+*.import
