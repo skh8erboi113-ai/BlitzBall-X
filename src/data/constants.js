@@ -1,135 +1,163 @@
 /**
- * Court geometry (meters) and rules tunables.
- * The court is a fenced half-court; the rim is at the negative-Z end.
+ * BLITZBALL X — tuning constants.
+ *
+ * World units are metres. The match is played inside a sphere of water. Gameplay happens on a
+ * horizontal "playing plane" through the sphere's centre (x/z), with height (y) used for
+ * breaches (vertical bursts), lobs and shots. Team 0 attacks +x, team 1 attacks -x.
  */
-export const COURT = {
-  halfWidth: 7.5, // x: -7.5 .. 7.5
-  baselineZ: -7.5, // behind the rim
-  halfcourtZ: 6.8, // top of the playable area
-  fenceMargin: 1.6, // fence sits this far outside the lines
-  rimX: 0,
-  rimZ: -5.9,
-  rimHeight: 3.05,
-  rimRadius: 0.23,
-  backboardZ: -6.3,
-  backboardWidth: 1.8,
-  backboardHeight: 1.05,
-  backboardBottom: 2.9,
-  arcRadius: 6.75, // "2-point" line (worth 2 in street rules)
-  keyHalfWidth: 2.45,
-  keyTopZ: -1.7, // free-throw line
-  checkBallZ: 3.6, // where possession restarts
-};
 
-export const FENCE = {
-  minX: -COURT.halfWidth - COURT.fenceMargin,
-  maxX: COURT.halfWidth + COURT.fenceMargin,
-  minZ: COURT.baselineZ - COURT.fenceMargin,
-  maxZ: COURT.halfcourtZ + COURT.fenceMargin,
+export const ARENA = {
+  sphereRadius: 24, // inner wall of the water sphere (visual + far ball bound)
+  fieldRadius: 13, // playable circle for players
+  ballRadius: 13.4, // ball reflects off the "current" here
+  goalX: 11.6, // goal plane |x|
+  goalY: 1.1, // goal centre height (body-centre height of a swimmer at rest)
+  goalRadius: 1.7, // hoop radius
+  postRadius: 0.16,
+  playerMaxX: 11.3, // outfield swimmers cannot enter the goal
+  keeperMinX: 9.4, // keeper box inner edge (|x| >= this)
+  keeperMaxX: 11.1,
+  keeperMaxZ: 1.9,
+  creaseRadius: 4.2, // holographic crease arc radius around each goal
+  centerCircle: 3.0,
+  ceilingY: 3.4, // ball vertical bounds
+  floorY: -1.7,
+  playerMinY: 0,
+  keeperMinY: -1.1,
+  keeperMaxY: 1.7,
 };
 
 export const RULES = {
-  targetScore: 21,
-  winBy: 2,
-  scoreCap: 30, // hard cap guarantees termination
-  shotClock: 20,
-  insidePoints: 1,
-  outsidePoints: 2,
-  gamebreakerBonus: 1, // extra point on top of the shot's value
-  gamebreakerSteal: 1, // points removed from the opponent
-  gamebreakerMeterMax: 2400,
-  resetDuration: 1.1, // seconds of "dead ball" after a score
-  clearRequired: true, // must take it back behind the arc after a defensive board / steal
+  halfLength: 150, // game seconds per half
+  halves: 2,
+  mercyLead: 8,
+  possessionClock: 20, // shoot within this many seconds of gaining possession
+  keeperHold: 4, // keeper must release within this
+  goalPoints: 1,
+  gbPoints: 2,
+  gbSteal: 1,
+  gamebreakerMeterMax: 3000,
+  onFireGoals: 2, // consecutive goals to catch fire
+  resetDuration: 1.7,
+  goalDeadTime: 2.6,
+  halftimeDuration: 3.2,
+  overtimeFatigueAfter: 120, // OT seconds after which keepers tire (guarantees a golden goal)
 };
 
 export const PHYS = {
-  gravity: 9.81 * 1.15, // slightly punchy gravity feels arcade
-  ballRadius: 0.125,
-  ballRestitution: 0.62,
-  ballFloorFriction: 0.985,
-  ballAirDrag: 0.999,
-  playerRadius: 0.42,
   fixedDt: 1 / 60,
+  gravityPlayer: -7.5, // buoyancy-damped
+  gravityLoose: -0.9, // loose ball sinks slowly
+  looseDrag: 1.35,
+  wallRestitution: 0.72,
+  currentStrength: 6, // pulls a ball that got behind the goal line back into play
 };
 
 export const MOVE = {
-  baseSpeed: 5.4, // m/s at SPD 50
-  speedPerStat: 0.028, // extra m/s per SPD point above 50
-  turboMult: 1.38,
-  accel: 22, // m/s^2 toward desired velocity
-  turboMax: 100,
-  turboDrain: 26, // per second while sprinting
-  turboRegen: 11, // per second otherwise
-  turboRegenDelay: 0.6,
-  ballCarrierSlow: 0.94,
-  jumpVelocity: 6.1,
-  bigJumpVelocity: 7.0,
+  accel: 17,
+  decel: 8.5,
+  maxSpeed: 5.4,
+  turboMult: 1.45,
+  turboDrain: 30, // per second while turbo swimming
+  turboRegen: 13,
+  turboMin: 6,
+  carrierMult: 0.95,
+  keeperSpeed: 6.0,
+  keeperDiveSpeed: 7.5,
+  breachVel: 5.6,
+  breachCooldown: 0.45,
+  fallenDuration: 1.15,
+  stumbleDuration: 0.85,
+  separation: 0.72,
 };
 
 export const ACTION = {
-  stealRange: 1.55,
-  shoveRange: 1.4,
-  blockRange: 1.9,
+  shotMinSpeed: 13,
+  shotMaxSpeed: 24,
+  shotChargeTime: 0.75,
+  perfectLo: 0.68,
+  perfectHi: 0.86,
+  goodLo: 0.45,
+  goodHi: 0.97,
+  shotMaxRange: 14,
   passSpeed: 15,
-  lobSpeed: 9,
-  catchRadius: 0.9,
-  looseBallPickupRadius: 0.75,
-  slamRange: 2.6,
-  layupRange: 2.0,
-  trickDuration: 0.55,
-  stealCooldown: 0.75,
-  shoveCooldown: 1.6,
-  stunAfterAnkleBreak: 0.85,
-  knockdownDuration: 1.35,
-  stealWhiffRecovery: 0.45,
+  lobSpeed: 9.5,
+  lobHeight: 1.75,
+  tackleRange: 1.65,
+  tackleCooldown: 0.8,
+  tackleWhiffRecovery: 0.45,
+  hitRange: 1.4,
+  hitCooldown: 1.3,
+  hitRecovery: 0.35,
+  trickDuration: 0.45,
+  trickCooldown: 0.5,
+  washRange: 1.9,
+  volleyRange: 7.5,
+  pickupRadius: 1.15,
+  keeperPickupRadius: 1.6,
+  keeperReach: 1.0,
+  gbDriveSpeed: 9.5,
+  gbDriveTime: 2.2,
+  gbShotRange: 7,
+  gbSlowmo: 0.42,
+  blockRadius: 0.75,
 };
 
 export const STYLE = {
-  trickBase: 40,
-  trickTurboMult: 1.75,
-  ankleBreakerBonus: 90,
-  comboWindow: 1.6,
-  comboMaxMult: 4,
-  slamPoints: 140,
-  alleyOopPoints: 220,
-  blockPoints: 120,
-  stealPoints: 100,
-  shovePoints: 60,
-  fadeawayPoints: 60,
-  swishBonus: 30,
-  lossOnTurnover: 120,
-  lossOnBlocked: 80,
+  trick: 40,
+  trickTurbo: 30,
+  washed: 150,
+  tackle: 90,
+  hit: 80,
+  block: 130,
+  save: 35,
+  saveBig: 90,
+  goal: 120,
+  goalLong: 220,
+  goalVolley: 260,
+  goalPerfect: 50,
+  assist: 60,
+  breachCatch: 20,
+  lossOnTurnover: 60,
+  comboWindow: 2.2,
+  comboStep: 0.25,
+  comboMax: 2.5,
 };
 
 export const DIFFICULTY = {
   rookie: {
     label: 'ROOKIE',
-    reaction: 0.42,
-    stealRate: 0.55,
-    trickRate: 0.35,
-    shotAccuracy: 0.86,
-    contestQuality: 0.7,
-    gbUse: 0.6,
-    turboUse: 0.5,
+    aiReaction: 0.7,
+    tackleRate: 0.55,
+    hitRate: 0.4,
+    shotAccuracy: 0.8,
+    keeperSkill: 0.8,
+    aiTurbo: 0.5,
+    aiGbRate: 0.6,
+    userBonus: 1.15,
   },
   pro: {
     label: 'PRO',
-    reaction: 0.26,
-    stealRate: 0.95,
-    trickRate: 0.7,
+    aiReaction: 1.0,
+    tackleRate: 0.95,
+    hitRate: 0.8,
     shotAccuracy: 1.0,
-    contestQuality: 0.9,
-    gbUse: 1.0,
-    turboUse: 0.8,
+    keeperSkill: 1.0,
+    aiTurbo: 0.85,
+    aiGbRate: 0.9,
+    userBonus: 1.0,
   },
   legend: {
     label: 'LEGEND',
-    reaction: 0.14,
-    stealRate: 1.35,
-    trickRate: 1.0,
-    shotAccuracy: 1.1,
-    contestQuality: 1.05,
-    gbUse: 1.0,
-    turboUse: 1.0,
+    aiReaction: 1.3,
+    tackleRate: 1.3,
+    hitRate: 1.1,
+    shotAccuracy: 1.15,
+    keeperSkill: 1.15,
+    aiTurbo: 1.0,
+    aiGbRate: 1.15,
+    userBonus: 0.9,
   },
 };
+
+export const ROLES = { FW: 'Striker', MF: 'Midfield', DF: 'Defender', GK: 'Keeper' };
