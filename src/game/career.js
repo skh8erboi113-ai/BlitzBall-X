@@ -2,7 +2,7 @@ import { TEAMS, teamOverall } from '../data/teams.js';
 import { RNG } from '../core/rng.js';
 
 /**
- * "Run The Streets" career: pick a crew, beat every other crew on their home court
+ * "Run The Pools" career: pick a crew, beat every other crew in their home sphere
  * in a ladder ordered by strength, earn Rep, unlock the Legend difficulty at the end.
  * Serialisable to JSON for localStorage.
  */
@@ -46,10 +46,10 @@ export function recordResult(career, result) {
 
 export function careerTitle(career) {
   const r = career.rep;
-  if (career.complete) return 'STREET LEGEND';
-  if (r >= 1200) return 'KING OF THE COURT';
+  if (career.complete) return 'BLITZ LEGEND';
+  if (r >= 1200) return 'KING OF THE POOL';
   if (r >= 800) return 'PROBLEM';
-  if (r >= 450) return 'HOOPER';
+  if (r >= 450) return 'BLITZER';
   if (r >= 200) return 'REGULAR';
   return 'ROOKIE';
 }
@@ -61,10 +61,16 @@ export function simQuick(homeId, awayId, seed) {
   const a = teamOverall(TEAMS.find((t) => t.id === awayId));
   let hs = 0;
   let as = 0;
-  while (!(hs >= 21 && hs - as >= 2) && !(as >= 21 && as - hs >= 2) && hs < 30 && as < 30) {
+  // ~12 goals a match on average, split by rating gap; no draws.
+  const goals = rng.int(8, 16);
+  for (let i = 0; i < goals; i++) {
     const pH = 0.5 + (h - a) / 200;
-    if (rng.chance(pH)) hs += rng.chance(0.3) ? 2 : 1;
-    else as += rng.chance(0.3) ? 2 : 1;
+    if (rng.chance(pH)) hs += 1;
+    else as += 1;
+  }
+  if (hs === as) {
+    if (rng.chance(0.5 + (h - a) / 200)) hs++;
+    else as++;
   }
   return [hs, as];
 }
