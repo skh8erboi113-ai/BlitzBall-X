@@ -495,4 +495,156 @@ export class CharacterView {
         this.body.position.z = lunge * 0.3;
         A[1].shoulder.rotation.x = -Math.PI + 0.2;
         A[1].elbow.rotation.x = -0.1;
-    
+        A[0].shoulder.rotation.x = -2.3;
+        A[0].elbow.rotation.x = -0.6;
+        L[0].hip.rotation.x = -0.5 * lunge;
+        L[1].hip.rotation.x = 0.6 * lunge;
+        L[1].knee.rotation.x = 0.6 * lunge;
+        this.neck.rotation.x = -0.5;
+        break;
+      }
+      case 'hit': {
+        // Shoulder charge.
+        const u = Math.min(1, p.stateTime / 0.42);
+        const push = Math.sin(u * Math.PI);
+        this.body.rotation.x = 0.35 * push;
+        this.torso.rotation.y = 0.7 * push;
+        A[1].shoulder.rotation.x = -1.2 * push;
+        A[1].shoulder.rotation.z = 0.9 * push;
+        A[1].elbow.rotation.x = -1.6;
+        A[0].shoulder.rotation.x = 0.6 * push;
+        A[0].shoulder.rotation.z = -0.5;
+        L[0].hip.rotation.x = 0.5 * push;
+        L[1].hip.rotation.x = -0.4 * push;
+        L[0].knee.rotation.x = 0.8 * push;
+        break;
+      }
+      case 'save': {
+        // Keeper dive toward knockDir.z side, arms extended.
+        const u = Math.min(1, p.stateTime / 0.55);
+        const dive = Math.sin(Math.min(1, u * 1.4) * Math.PI * 0.5);
+        const side = p.knockDir.z >= 0 ? 1 : -1;
+        // facing is toward the field; z side in world → roll body sideways
+        this.body.rotation.z = side * dive * 1.3;
+        this.body.position.y = dive * 0.2;
+        A[0].shoulder.rotation.x = -Math.PI + 0.1;
+        A[1].shoulder.rotation.x = -Math.PI + 0.1;
+        A[0].shoulder.rotation.z = -0.1;
+        A[1].shoulder.rotation.z = 0.1;
+        A[0].elbow.rotation.x = -0.05;
+        A[1].elbow.rotation.x = -0.05;
+        L[0].hip.rotation.x = -0.2;
+        L[1].hip.rotation.x = 0.4 * dive;
+        L[1].knee.rotation.x = 0.7 * dive;
+        this.neck.rotation.x = -0.3;
+        break;
+      }
+      case 'stumble': {
+        const u = Math.min(1, p.stateTime / Math.max(0.01, p.stateDur));
+        treadWater();
+        this.body.rotation.x = 0.8 * Math.sin(u * Math.PI);
+        this.body.rotation.z = 0.6 * Math.sin(u * Math.PI * 2);
+        this.body.rotation.y = Math.sin(u * Math.PI) * 1.2;
+        A[0].shoulder.rotation.z = -1.6;
+        A[1].shoulder.rotation.z = 1.6;
+        break;
+      }
+      case 'fallen': {
+        // Tumbling through the water, then righting.
+        const dur = Math.max(0.01, p.stateDur);
+        const u = Math.min(1, p.stateTime / dur);
+        const tumble = Math.min(1, u * 1.8);
+        const recover = u > 0.7 ? (u - 0.7) / 0.3 : 0;
+        const spin = tumble * Math.PI * 2 * (1 - recover * 0.0);
+        this.body.rotation.x = spin * (1 - recover) + recover * 0.0;
+        this.body.rotation.z = Math.sin(u * Math.PI) * 0.8 * (1 - recover);
+        this.body.position.y = -Math.sin(u * Math.PI) * 0.5;
+        A[0].shoulder.rotation.z = -1.4 * (1 - recover);
+        A[1].shoulder.rotation.z = 1.4 * (1 - recover);
+        A[0].shoulder.rotation.x = -0.5;
+        A[1].shoulder.rotation.x = -0.5;
+        L[0].hip.rotation.x = -0.3;
+        L[1].hip.rotation.x = 0.5;
+        L[1].knee.rotation.x = 0.9;
+        L[0].knee.rotation.x = 0.4;
+        if (recover > 0) treadWater();
+        break;
+      }
+      case 'celebrate': {
+        const u = p.stateTime;
+        const bounce = Math.abs(Math.sin(u * 7));
+        treadWater();
+        hipY = 1.0 + bounce * 0.15;
+        A[0].shoulder.rotation.x = -2.8 + Math.sin(u * 9) * 0.3;
+        A[1].shoulder.rotation.x = -2.8 - Math.sin(u * 9) * 0.3;
+        A[0].shoulder.rotation.z = -0.5;
+        A[1].shoulder.rotation.z = 0.5;
+        A[0].elbow.rotation.x = -0.6;
+        A[1].elbow.rotation.x = -0.6;
+        this.neck.rotation.x = -0.35;
+        this.body.rotation.x = -0.1;
+        break;
+      }
+      default:
+        treadWater();
+        break;
+    }
+
+    this.hips.position.y = hipY;
+    // Bank into turns while swimming
+    if ((st === 'swim' || st === 'idle') && speed > 0.2) {
+      let d = p.facing - (p.prevFacing ?? p.facing);
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      this.torso.rotation.z += -Math.sin(d) * 0.5;
+    }
+    p.prevFacing = p.facing;
+
+    // Caustic contact shadow on the disc, scaled by height
+    const h = p.y;
+    const sc = Math.max(0.35, 1 - h * 0.18);
+    this.shadow.scale.setScalar(sc);
+    this.shadow.position.y = 0.012 - h;
+    this.shadow.material.opacity = 0.4 * sc;
+    this.ring.position.y = 0.02 - h;
+    this.turboGlow.position.y = 0.03 - h;
+
+    // Control ring
+    this.ring.visible = !!p.controlled && !!(sim.userTeam !== null && sim.userTeam === p.team);
+    if (this.ring.visible) {
+      const pulse = 0.85 + Math.sin(this.t * 6) * 0.15;
+      this.ring.scale.setScalar(pulse);
+      this.ring.material.opacity = 0.75;
+    }
+    // Turbo glow
+    const tg = this.turboGlow.material;
+    tg.opacity += ((p.turboActive || st === 'gbdrive' ? 0.85 : 0) - tg.opacity) * Math.min(1, dt * 10);
+    this.turboGlow.rotation.z += dt * 4;
+    this.turboGlow.scale.setScalar(1 + Math.sin(this.t * 14) * 0.08);
+  }
+
+  /** World position of the right hand (for ball attachment while holding). */
+  handWorld(target) {
+    this.arms[1].hand.getWorldPosition(target);
+    return target;
+  }
+
+  leftHandWorld(target) {
+    this.arms[0].hand.getWorldPosition(target);
+    return target;
+  }
+}
+
+let _blob = null;
+function blobShadowTexture() {
+  if (_blob) return _blob;
+  const c = makeCanvas(128, 128);
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64, 64, 10, 64, 64, 60);
+  g.addColorStop(0, 'rgba(0,0,0,0.9)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  _blob = canvasTexture(c);
+  return _blob;
+}
