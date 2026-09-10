@@ -397,4 +397,62 @@ export function ResultsScreen(app, params) {
   const rows = (team) =>
     sim
       .teamPlayers(team)
-      .map((p) => `<tr><td class="r-name"><b>${p.data.nick}</b> ${p.data.name}${p.isKeeper ? ' <i>GK</i>' : ''}</td><td>${p.stats.goals}</td><td>${p.stats.sog}/${p.stats.sh
+      .map((p) => `<tr><td class="r-name"><b>${p.data.nick}</b> ${p.data.name}${p.isKeeper ? ' <i>GK</i>' : ''}</td><td>${p.stats.goals}</td><td>${p.stats.sog}/${p.stats.shots}</td><td>${p.stats.ast}</td><td>${p.stats.tkl}</td><td>${p.stats.hits}</td><td>${p.stats.blk}</td><td>${p.stats.saves}</td><td>${p.stats.washed}</td><td class="r-style">${p.stats.style}</td></tr>`)
+      .join('');
+  const mvp = [...sim.players].sort((a, b) => b.stats.style + b.stats.goals * 120 + b.stats.saves * 40 - (a.stats.style + a.stats.goals * 120 + a.stats.saves * 40))[0];
+  const el = h(`
+    <section class="screen results" style="--c1:${sim.teams[sim.winner].primary};--c3:${sim.teams[sim.winner].accent}">
+      <div class="res-head">
+        <div class="res-verdict">${won === null ? 'FULL TIME' : won ? 'YOU RUN THE POOL' : 'RUN IT BACK'}</div>
+        <div class="res-score"><span class="rs-team" style="--c1:${h0.primary}">${h0.abbr}</span><span class="rs-num">${sim.score[0]}</span><span class="rs-dash">–</span><span class="rs-num">${sim.score[1]}</span><span class="rs-team" style="--c1:${a0.primary}">${a0.abbr}</span></div>
+        <div class="res-sub">${sim.teams[sim.winner].city.toUpperCase()} ${sim.teams[sim.winner].name.toUpperCase()} WIN${sim.overtime ? ' IN OVERTIME' : ''} · MATCH MVP: ${mvp.data.nick} (${mvp.stats.goals} G · ${mvp.stats.style} STYLE)</div>
+        ${careerResult ? `<div class="res-career">${careerResult}</div>` : ''}
+      </div>
+      <div class="res-tables">
+        ${[0, 1].map((t) => `<table class="box" style="--c1:${sim.teams[t].primary};--c3:${sim.teams[t].accent}"><thead><tr><th class="r-name">${sim.teams[t].city.toUpperCase()} ${sim.teams[t].name.toUpperCase()}</th><th>G</th><th>SOG/SH</th><th>AST</th><th>TKL</th><th>HIT</th><th>BLK</th><th>SAV</th><th>WSH</th><th>STYLE</th></tr></thead><tbody>${rows(t)}</tbody></table>`).join('')}
+      </div>
+      ${menuList([
+        ...(mode === 'career' ? [{ action: 'career', label: 'BACK TO THE LADDER' }] : [{ action: 'rematch', label: 'RUN IT BACK', sub: 'Same matchup' }, { action: 'teamselect', label: 'NEW MATCHUP' }]),
+        { action: 'title', label: 'MAIN MENU' },
+      ])}
+    </section>`);
+  const menu = wireMenu(el, (action) => {
+    if (action === 'rematch') app.startMatch({ home: h0, away: a0, userTeam, mode });
+    else if (action === 'teamselect') app.go('teamselect', { mode });
+    else if (action === 'career') app.go('career');
+    else app.go('title');
+  }, app);
+  return { el, onNav: (n) => menu.nav(n) };
+}
+
+// ---------------------------------------------------------------------------
+// Pause overlay (rendered above the match)
+// ---------------------------------------------------------------------------
+
+export function PauseOverlay(app, { onResume, onQuit, onRestart }) {
+  const el = h(`
+    <div class="pause">
+      <div class="pause-box">
+        <div class="pause-title">PAUSED</div>
+        ${menuList([
+          { action: 'resume', label: 'RESUME' },
+          { action: 'controls', label: 'CONTROLS' },
+          { action: 'settings', label: 'SETTINGS' },
+          ...(onRestart ? [{ action: 'restart', label: 'RESTART MATCH' }] : []),
+          { action: 'quit', label: 'QUIT TO MENU' },
+        ])}
+        <div class="pause-controls hidden">
+          <div><b>WASD</b> swim · <b>SHIFT</b> turbo · <b>J/SPACE</b> shoot (hold, release on PERFECT) · <b>K</b> pass (<b>+SHIFT</b> lob for a volley)</div>
+          <div><b>L</b> trick / tackle · <b>I</b> big hit · <b>U</b> breach / block · <b>Q</b> switch · <b>E</b> Gamebreaker</div>
+        </div>
+      </div>
+    </div>`);
+  const menu = wireMenu(el, (action) => {
+    if (action === 'resume') onResume();
+    else if (action === 'quit') onQuit();
+    else if (action === 'restart') onRestart();
+    else if (action === 'controls') el.querySelector('.pause-controls').classList.toggle('hidden');
+    else if (action === 'settings') app.openSettingsOverlay();
+  }, app);
+  return { el, onNav: (n) => menu.nav(n) };
+}
