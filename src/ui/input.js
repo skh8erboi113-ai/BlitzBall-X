@@ -3,11 +3,11 @@ import { emptyInput } from '../game/entities.js';
 /**
  * Keyboard + gamepad input mapped into the sim's input struct.
  *
- * Keyboard:  WASD/Arrows move · SHIFT turbo · J/Space shoot (hold & release) ·
- *            K pass (K+turbo = alley-oop) · L trick / steal · I shove · U jump/block ·
+ * Keyboard:  WASD/Arrows move · SHIFT turbo · J/Space shoot (hold to charge, release on PERFECT) ·
+ *            K pass (K+turbo = lob for a volley) · L trick / tackle · I big hit · U breach (jump/block) ·
  *            Q switch player · E gamebreaker · ESC pause
  * Gamepad:   Left stick move · RT/RB turbo · A/Cross shoot · X/Square pass ·
- *            B/Circle trick/steal · Y/Triangle shove · LB switch · LT+RT gamebreaker · Start pause
+ *            B/Circle trick/tackle · Y/Triangle hit · LB switch · LT+RT gamebreaker · Start pause
  */
 export class InputManager {
   constructor() {
@@ -68,8 +68,8 @@ export class InputManager {
     let shootReleased = this.justReleased('KeyJ', 'Space');
     let pass = this.justPressed('KeyK');
     let trick = this.justPressed('KeyL');
-    let shove = this.justPressed('KeyI');
-    let jump = this.justPressed('KeyU');
+    let hit = this.justPressed('KeyI');
+    let breach = this.justPressed('KeyU');
     let switchPlayer = this.justPressed('KeyQ', 'Tab');
     let gamebreaker = this.justPressed('KeyE');
     let pause = false;
@@ -107,7 +107,7 @@ export class InputManager {
       if (edgeUp(0)) shootReleased = true;
       if (edge(2)) pass = true;
       if (edge(1)) trick = true;
-      if (edge(3)) shove = true;
+      if (edge(3)) hit = true;
       if (edge(4)) switchPlayer = true;
       if (b(6) && b(7) && edge(6)) gamebreaker = true;
       if (b(6) && edge(7)) gamebreaker = true;
@@ -136,8 +136,8 @@ export class InputManager {
     i.shootReleased = shootReleased;
     i.pass = pass;
     i.trick = trick;
-    i.shove = shove;
-    i.jump = jump;
+    i.hit = hit;
+    i.breach = breach;
     i.switchPlayer = switchPlayer;
     i.gamebreaker = gamebreaker;
     this.pressed.clear();
@@ -183,4 +183,4 @@ export class InputManager {
     this.released.clear();
     return out;
   }
-}
+        }
