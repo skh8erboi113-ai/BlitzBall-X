@@ -1,13 +1,14 @@
 # BLITZBALL X
 
-**Arcade 3-on-3 street ball. Turbo, tricks, ankle breakers, Gamebreakers. First to 21, win by 2. No refs.**
+**Arcade underwater 3-on-3 Blitzball. Turbo, tricks, big hits, keepers, Gamebreakers. Two halves, most goals wins. No refs.**
 
-BLITZBALL X is a finished, browser-playable arcade basketball game in the spirit of classic
-street-ball arcade titles: stylised cel-shaded players on a caged blacktop, a broadcast-style
-camera that punches in on dunks, a graffiti/hip-hop UI, live commentary, a style meter that
-charges an unstoppable **Gamebreaker**, and a "Run The Streets" career ladder against seven
-rival crews. It runs entirely client-side (three.js + Vite) — no backend, no accounts, no
-downloads.
+BLITZBALL X is a finished, browser-playable arcade **Blitzball** game — the sphere-pool team sport
+(swimmers, a ring goal at each end, keepers, tackles, long-range shots) — built with the mechanics and
+attitude of classic street-ball arcade titles: **Turbo**, trick swims that **wash** defenders, **big
+hits** that knock the ball loose, a **style meter** that charges an unstoppable **Gamebreaker**, **ON
+FIRE** streaks, lob-and-volley plays, a broadcast camera that punches in on goals, cel-shaded
+characters, a graffiti / hip-hop UI, live commentary, and a "Run The Pools" career ladder against
+seven rival crews. It runs entirely client-side (three.js + Vite) — no backend, no accounts, no downloads.
 
 ## Play
 
@@ -23,83 +24,74 @@ npm run build      # outputs static site to dist/
 npm run preview    # serve dist/ locally on http://localhost:4173
 ```
 
-`dist/` is a static bundle with relative asset paths — drop it on any static host (GitHub
-Pages, Netlify, S3, nginx). A GitHub Pages workflow is included (`.github/workflows/deploy-pages.yml`).
+`dist/` is a static bundle with relative asset paths — drop it on any static host (GitHub Pages,
+Netlify, S3, nginx). A GitHub Pages workflow is included (`.github/workflows/deploy-pages.yml`).
 
 ### Controls
 
 | Action | Keyboard | Gamepad |
 | --- | --- | --- |
-| Move | WASD / Arrows | Left stick / D-pad |
+| Swim | WASD / Arrows | Left stick / D-pad |
 | Turbo | Shift | RT / RB |
-| Shoot (hold, release at the top of the jump) | J / Space | A / Cross |
-| Pass (hold Turbo for alley-oop) | K | X / Square |
-| Trick (with ball) / Steal (defense) | L | B / Circle |
-| Shove | I | Y / Triangle |
-| Jump / Block | U (or J on defense) | A / Cross on defense |
-| Switch player | Q / Tab | LB |
+| Shoot (hold to charge, release in the PERFECT window) | J / Space | A / Cross |
+| Pass (hold Turbo to lob for a volley) | K | X / Square |
+| Trick (with ball) / Tackle (defense) | L | B / Circle |
+| Big hit | I | Y / Triangle |
+| Breach (leap) / Block / Volley a loose ball | U (or J on defense) | A / Cross on defense |
+| Switch swimmer | Q / Tab | LB |
 | Gamebreaker | E | LT + RT |
 | Pause | Esc | Start |
 
 ### Rules
 
-* First to **21**, win by 2 (hard cap at 30). Inside the arc = 1 point, outside = 2.
-* 20-second shot clock. After a change of possession you must **clear** the ball outside the arc.
-* Tricks, ankle breakers, dunks, blocks, steals and alley-oops earn **Style**. Chaining tricks
-  quickly builds a combo multiplier; turnovers drain style.
-* A full style meter arms a **Gamebreaker**: press E with the ball for an unstoppable slam that
-  adds 2 to your score **and subtracts 1 from theirs**.
-* Three straight buckets puts your crew **ON FIRE** (hot shooting, ball glows).
+- 3 outfield swimmers + a keeper per side inside a sphere of water. Team 0 attacks +x.
+- Two halves of 2:30. Most goals wins. Level at full time → **golden-goal overtime** (keepers tire
+  after two OT minutes, so a winner is guaranteed).
+- **20-second possession clock** — shoot before it runs out or it's a turnover.
+- Keepers must release the ball within 4 seconds.
+- **Mercy rule**: up by 8 in the second half and it's over.
+- Goal = 1. **Gamebreaker goal = 2 and takes 1 off the other team.**
+- Style comes from tricks, washes, tackles, big hits, blocks, saves, volleys and long-range goals.
+  Chaining moves builds a combo multiplier; turnovers drain the meter. A full meter unlocks the
+  Gamebreaker. Two straight goals and your crew is **ON FIRE**.
 
 ### Modes
 
-* **Pick Up Game** — quick match vs CPU, any crew vs any crew, three difficulties.
-* **Run The Streets** — career ladder: pick a crew, beat all seven rivals on their own courts,
-  earn Rep, unlock Legend difficulty. Progress is saved in `localStorage`.
-* **Watch** — CPU vs CPU exhibition.
+- **Pick Up Match** — quick match vs CPU, pick both crews and the difficulty (Rookie / Pro / Legend).
+- **Run The Pools** — career ladder: pick a crew, beat the other seven in their home spheres. Rep,
+  titles, records and Legend unlock persist in `localStorage`.
+- **Watch** — CPU vs CPU exhibition.
 
-## Project layout
+## Architecture
 
 ```
-index.html              entry point
-src/main.js             app shell: routing, match lifecycle, fixed-step loop, audio wiring
-src/styles.css          graffiti / hip-hop UI theme + HUD
-src/core/               vec3, seeded RNG, event bus (dependency-free)
-src/data/               constants (court, rules, physics, difficulty) and the 8 crews / rosters
-src/game/               headless deterministic simulation: match.js (rules, physics, actions),
-                        ai.js (CPU brains), entities.js, career.js
-src/render/             three.js presentation: court, cel-shaded characters, FX, camera, post
-src/ui/                 input (keyboard + gamepad), procedural audio, HUD, commentary,
-                        screens/menus, localStorage save
-scripts/simulate.mjs    headless CPU-vs-CPU balance runner (`npm run sim -- 24 pro`)
-tests/                  node:test suite (rules, determinism, box score, input, career)
-tools/                  headless-Chromium QA harnesses (screenshots, scripted playtests)
+src/
+  core/        vec3, seeded RNG, event bus
+  data/        constants (arena / rules / physics / tuning / difficulty), 8 crews × 6 swimmers
+  game/        MatchSim (deterministic, headless, fixed 60 Hz), AI brains, career ladder
+  render/      three.js: sphere pool + goals + stadium, cel-shaded characters, FX, camera
+  ui/          input (keyboard + gamepad), HUD, commentary, procedural audio, screens, save
+  main.js      app shell: screens, match lifecycle, fixed-step loop
+tests/         node:test suite (rules, determinism, bounds, mechanics coverage)
+scripts/       headless simulation runner (balance / stall detection)
+tools/         headless Chromium QA (screenshots, scripted playtest, screen walk)
 ```
 
-The simulation (`src/game`) has no DOM or three.js dependency and is driven at a fixed 60 Hz.
-The renderer, HUD, commentary and audio subscribe to its event bus, so the same match code is
-used by the game, the tests and the headless balance runner. Given a seed, a match is fully
-deterministic.
+The simulation has no DOM or three.js dependency; presentation, audio and commentary subscribe to
+its event bus (`score`, `save`, `tackle`, `bighit`, `washed`, `block`, `gamebreaker`, …). The same
+`setUserInput()` contract drives both the human and the CPU, so AI and player go through identical rules.
 
-## Quality checks
+## QA
 
 ```bash
-npm test                   # unit + simulation tests
-npm run sim -- 24 pro      # 24 full CPU games; fails if any game does not finish
-npm run qa:screens         # screenshots of every screen + pause/results flow (needs dev server)
-npm run qa:play            # scripted full game through the real renderer/HUD, reports page errors
+npm test                        # unit + simulation tests
+npm run sim -- 24 pro           # 24 headless CPU matches; exits 1 if any match stalls
+npm run qa:screens -- http://localhost:4173/ screenshots/screens   # walk every screen headlessly
+npm run qa:play -- http://localhost:4173/ screenshots/prod         # scripted playtest to results
 ```
 
-The QA tools use `@sparticuz/chromium` + `puppeteer-core` (software WebGL) so they run in CI
-containers without a GPU.
+CI (`.github/workflows/ci.yml`) runs the tests, the simulation sweep and a production build.
 
-## Browser support
+## Original IP
 
-Any current Chromium, Firefox or Safari with WebGL 2. The "Graphics" setting (Low / Medium /
-High) trades shadows, bloom and resolution for performance on integrated GPUs and laptops.
-
-## Credits
-
-Original game, teams, players and art. Fonts: Bangers, Barlow Condensed, Permanent Marker
-(SIL Open Font License, via `@fontsource`). All sound is synthesised at runtime with the Web
-Audio API.
+All crews, swimmers, arenas, names and art are original to this project.
