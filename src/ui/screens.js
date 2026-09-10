@@ -1,186 +1,400 @@
-import { emptyInput } from '../game/entities.js';
+import { TEAMS, TEAM_BY_ID, playerOverall, teamOverall, starters } from '../data/teams.js';
+import { DIFFICULTY } from '../data/constants.js';
+import { currentOpponent, careerTitle } from '../game/career.js';
 
 /**
- * Keyboard + gamepad input mapped into the sim's input struct.
- *
- * Keyboard:  WASD/Arrows move · SHIFT turbo · J/Space shoot (hold to charge, release on PERFECT) ·
- *            K pass (K+turbo = lob for a volley) · L trick / tackle · I big hit · U breach (jump/block) ·
- *            Q switch player · E gamebreaker · ESC pause
- * Gamepad:   Left stick move · RT/RB turbo · A/Cross shoot · X/Square pass ·
- *            B/Circle trick/tackle · Y/Triangle hit · LB switch · LT+RT gamebreaker · Start pause
+ * DOM screens. Each screen is a function(app) → { el, onNav(navInput), destroy }.
+ * Menus support mouse and keyboard/gamepad navigation.
  */
-export class InputManager {
-  constructor() {
-    this.keys = new Set();
-    this.input = emptyInput();
-    this.pressed = new Set(); // edge-triggered this frame
-    this.released = new Set();
-    this.padPrev = {};
-    this.onPause = null;
-    this.enabled = true;
-    this.lastDevice = 'keyboard';
-    this.moveVec = { x: 0, z: 0 };
 
-    window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
-      const k = e.code;
-      this.keys.add(k);
-      this.lastDevice = 'keyboard';
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(k)) e.preventDefault();
-      // Escape toggles pause during a match. When the pause handler consumes the key we must
-      // NOT also register it as an edge, otherwise the pause menu reads it as "back" and resumes.
-      if (k === 'Escape' && this.onPause && this.onPause()) return;
-      this.pressed.add(k);
-    });
-    window.addEventListener('keyup', (e) => {
-      this.keys.delete(e.code);
-      this.released.add(e.code);
-    });
-    window.addEventListener('blur', () => {
-      this.keys.clear();
-    });
-  }
+const h = (html) => {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+};
 
-  down(...codes) {
-    return codes.some((c) => this.keys.has(c));
-  }
+function teamCard(team, opts = {}) {
+  const ovr = teamOverall(team);
+  const stars = team.roster.slice(0, 3).map((p) => `<li><span class="nick">${p.nick}</span><span class="pname">${p.name}</span><span class="ovr">${playerOverall(p)}</span></li>`).join('');
+  return `
+    <div class="team-card ${opts.cls || ''}" style="--c1:${team.primary};--c2:${team.secondary};--c3:${team.accent}" data-id="${team.id}">
+      <div class="tc-head">
+        <div class="tc-abbr">${team.abbr}</div>
+        <div class="tc-names"><div class="tc-city">${team.city}</div><div class="tc-name">${team.name}</div></div>
+        <div class="tc-ovr"><span>OVR</span>${ovr}</div>
+      </div>
+      <div class="tc-motto">“${team.motto}”</div>
+      <ul class="tc-roster">${stars}</ul>
+    </div>`;
+}
 
-  justPressed(...codes) {
-    return codes.some((c) => this.pressed.has(c));
-  }
+function menuList(items) {
+  return `<ul class="menu">${items.map((it, i) => `<li class="menu-item ${i === 0 ? 'sel' : ''}" data-action="${it.action}" ${it.disabled ? 'data-disabled="1"' : ''}><span class="mi-label">${it.label}</span>${it.sub ? `<span class="mi-sub">${it.sub}</span>` : ''}</li>`).join('')}</ul>`;
+}
 
-  justReleased(...codes) {
-    return codes.some((c) => this.released.has(c));
-  }
-
-  /** Read the current frame's input into a struct suitable for MatchSim.setUserInput. */
-  poll() {
-    const i = this.input;
-    let mx = 0;
-    let mz = 0;
-    if (this.down('KeyA', 'ArrowLeft')) mx -= 1;
-    if (this.down('KeyD', 'ArrowRight')) mx += 1;
-    if (this.down('KeyW', 'ArrowUp')) mz -= 1;
-    if (this.down('KeyS', 'ArrowDown')) mz += 1;
-    let turbo = this.down('ShiftLeft', 'ShiftRight');
-    let shootHeld = this.down('KeyJ', 'Space');
-    let shootPressed = this.justPressed('KeyJ', 'Space');
-    let shootReleased = this.justReleased('KeyJ', 'Space');
-    let pass = this.justPressed('KeyK');
-    let trick = this.justPressed('KeyL');
-    let hit = this.justPressed('KeyI');
-    let breach = this.justPressed('KeyU');
-    let switchPlayer = this.justPressed('KeyQ', 'Tab');
-    let gamebreaker = this.justPressed('KeyE');
-    let pause = false;
-
-    // Gamepad
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const pad = pads && Array.from(pads).find((p) => p && p.connected);
-    if (pad) {
-      const dz = 0.18;
-      const ax = pad.axes[0] || 0;
-      const az = pad.axes[1] || 0;
-      if (Math.abs(ax) > dz || Math.abs(az) > dz) {
-        mx = ax;
-        mz = az;
-        this.lastDevice = 'gamepad';
+function wireMenu(root, onSelect, app) {
+  const items = Array.from(root.querySelectorAll('.menu-item'));
+  let idx = items.findIndex((i) => i.classList.contains('sel'));
+  if (idx < 0) idx = 0;
+  const setSel = (n) => {
+    items[idx]?.classList.remove('sel');
+    idx = (n + items.length) % items.length;
+    items[idx].classList.add('sel');
+    app.audio.uiMove();
+  };
+  items.forEach((el, i) => {
+    el.addEventListener('mouseenter', () => {
+      if (i !== idx) {
+        items[idx]?.classList.remove('sel');
+        idx = i;
+        el.classList.add('sel');
       }
-      const b = (n) => !!(pad.buttons[n] && pad.buttons[n].pressed);
-      const edge = (n) => {
-        const now = b(n);
-        const was = !!this.padPrev[n];
-        this.padPrev[n] = now;
-        return now && !was;
-      };
-      const edgeUp = (n) => {
-        const now = b(n);
-        const was = !!this.padPrev['u' + n];
-        this.padPrev['u' + n] = now;
-        return !now && was;
-      };
-      // Standard mapping: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 9 Start, 12-15 dpad
-      if (b(7) || b(5)) turbo = true;
-      const aNow = b(0);
-      if (aNow) shootHeld = true;
-      if (edge(0)) shootPressed = true;
-      if (edgeUp(0)) shootReleased = true;
-      if (edge(2)) pass = true;
-      if (edge(1)) trick = true;
-      if (edge(3)) hit = true;
-      if (edge(4)) switchPlayer = true;
-      if (b(6) && b(7) && edge(6)) gamebreaker = true;
-      if (b(6) && edge(7)) gamebreaker = true;
-      if (edge(9)) pause = true;
-      if (b(12)) mz = -1;
-      if (b(13)) mz = 1;
-      if (b(14)) mx = -1;
-      if (b(15)) mx = 1;
-      if (edge(14) || edge(15)) {
-        /* d-pad reserved */
+    });
+    el.addEventListener('click', () => {
+      if (el.dataset.disabled) return;
+      app.audio.uiConfirm();
+      onSelect(el.dataset.action, el);
+    });
+  });
+  return {
+    nav(n) {
+      if (n.up) setSel(idx - 1);
+      if (n.down) setSel(idx + 1);
+      if (n.confirm) {
+        const el = items[idx];
+        if (el && !el.dataset.disabled) {
+          app.audio.uiConfirm();
+          onSelect(el.dataset.action, el);
+        }
       }
-      if (pad.buttons.some((x) => x.pressed)) this.lastDevice = 'gamepad';
-    }
-    if (pause && this.onPause) this.onPause();
+    },
+    get index() {
+      return idx;
+    },
+  };
+}
 
-    const len = Math.hypot(mx, mz);
-    if (len > 1) {
-      mx /= len;
-      mz /= len;
-    }
-    i.moveX = mx;
-    i.moveZ = mz;
-    i.turbo = turbo;
-    i.shoot = shootHeld;
-    i.shootPressed = shootPressed;
-    i.shootReleased = shootReleased;
-    i.pass = pass;
-    i.trick = trick;
-    i.hit = hit;
-    i.breach = breach;
-    i.switchPlayer = switchPlayer;
-    i.gamebreaker = gamebreaker;
-    this.pressed.clear();
-    this.released.clear();
-    return i;
-  }
+// ---------------------------------------------------------------------------
+// Title
+// ---------------------------------------------------------------------------
 
-  /** Menu navigation helpers (edge-triggered). */
-  menuPoll() {
-    const out = { up: false, down: false, left: false, right: false, confirm: false, back: false };
-    out.up = this.justPressed('KeyW', 'ArrowUp');
-    out.down = this.justPressed('KeyS', 'ArrowDown');
-    out.left = this.justPressed('KeyA', 'ArrowLeft');
-    out.right = this.justPressed('KeyD', 'ArrowRight');
-    out.confirm = this.justPressed('Enter', 'Space', 'KeyJ');
-    out.back = this.justPressed('Escape', 'Backspace', 'KeyK');
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const pad = pads && Array.from(pads).find((p) => p && p.connected);
-    if (pad) {
-      const b = (n) => !!(pad.buttons[n] && pad.buttons[n].pressed);
-      const edge = (n) => {
-        const now = b(n);
-        const was = !!this.padPrev['m' + n];
-        this.padPrev['m' + n] = now;
-        return now && !was;
-      };
-      const axisEdge = (idx, dir) => {
-        const v = pad.axes[idx] || 0;
-        const now = dir < 0 ? v < -0.6 : v > 0.6;
-        const key = 'ax' + idx + dir;
-        const was = !!this.padPrev[key];
-        this.padPrev[key] = now;
-        return now && !was;
-      };
-      if (edge(12) || axisEdge(1, -1)) out.up = true;
-      if (edge(13) || axisEdge(1, 1)) out.down = true;
-      if (edge(14) || axisEdge(0, -1)) out.left = true;
-      if (edge(15) || axisEdge(0, 1)) out.right = true;
-      if (edge(0) || edge(9)) out.confirm = true;
-      if (edge(1)) out.back = true;
+export function TitleScreen(app) {
+  const hasCareer = !!app.state.career;
+  const el = h(`
+    <section class="screen title-screen">
+      <div class="title-bg"></div>
+      <div class="title-graffiti">
+        <div class="logo-wrap">
+          <div class="logo-blitz">BLITZBALL</div>
+          <div class="logo-x">X</div>
+        </div>
+        <div class="tagline">UNDERWATER 3-ON-3 · TWO HALVES · NO REFS</div>
+      </div>
+      <div class="title-menu">
+        ${menuList([
+          { action: 'quick', label: 'PICK UP MATCH', sub: 'Quick match vs CPU' },
+          { action: 'career', label: hasCareer ? 'CONTINUE RUNNING THE POOLS' : 'RUN THE POOLS', sub: hasCareer ? `${careerTitle(app.state.career)} · ${app.state.career.wins}W ${app.state.career.losses}L` : 'Career ladder · 7 crews' },
+          { action: 'versus', label: 'WATCH', sub: 'CPU vs CPU exhibition' },
+          { action: 'howto', label: 'HOW TO PLAY' },
+          { action: 'settings', label: 'SETTINGS' },
+        ])}
+      </div>
+      <div class="title-foot"><span>${app.state.records.wins}W – ${app.state.records.losses}L</span><span>BEST STYLE ${app.state.records.styleBest}</span><span>v1.0</span></div>
+    </section>`);
+  const menu = wireMenu(el, (action) => {
+    if (action === 'quick') app.go('teamselect', { mode: 'quick' });
+    else if (action === 'career') app.go(hasCareer ? 'career' : 'teamselect', { mode: 'career' });
+    else if (action === 'versus') app.go('teamselect', { mode: 'versus' });
+    else if (action === 'howto') app.go('howto');
+    else if (action === 'settings') app.go('settings');
+  }, app);
+  return { el, onNav: (n) => menu.nav(n) };
+}
+
+// ---------------------------------------------------------------------------
+// Team select
+// ---------------------------------------------------------------------------
+
+export function TeamSelectScreen(app, params) {
+  const mode = params.mode || 'quick';
+  let side = 0; // 0 = picking your team, 1 = picking opponent (quick/versus)
+  let picks = [0, 1];
+  const el = h(`
+    <section class="screen teamselect">
+      <header class="screen-head"><h1>${mode === 'career' ? 'PICK YOUR CREW' : mode === 'versus' ? 'PICK THE MATCHUP' : 'PICK YOUR CREW'}</h1><div class="head-sub">${mode === 'career' ? 'You run with them all the way to the top.' : 'Left/Right to browse · Enter to lock in'}</div></header>
+      <div class="ts-body">
+        <div class="ts-side ts-left"><div class="ts-label">${mode === 'versus' ? 'HOME' : 'YOU'}</div><div class="ts-card"></div></div>
+        <div class="ts-vs">VS</div>
+        <div class="ts-side ts-right"><div class="ts-label">${mode === 'career' ? 'FIRST OPPONENT' : 'CPU'}</div><div class="ts-card"></div></div>
+      </div>
+      <div class="ts-grid">${TEAMS.map((t, i) => `<button class="ts-chip" data-i="${i}" style="--c1:${t.primary};--c3:${t.accent}">${t.abbr}</button>`).join('')}</div>
+      <footer class="screen-foot">
+        <div class="foot-left"><span class="key">◀ ▶</span> browse <span class="key">▲ ▼</span> switch side <span class="key">ENTER</span> lock in <span class="key">ESC</span> back</div>
+        <div class="foot-right">
+          <label>DIFFICULTY <select class="diff-sel">${Object.entries(DIFFICULTY).map(([k, v]) => `<option value="${k}" ${app.state.settings.difficulty === k ? 'selected' : ''} ${k === 'legend' && !app.state.unlocked.legendMode && false ? 'disabled' : ''}>${v.label}</option>`).join('')}</select></label>
+          <button class="btn primary start-btn">${mode === 'career' ? 'START THE RUN' : 'DIVE IN'}</button>
+        </div>
+      </footer>
+    </section>`);
+  const cards = [el.querySelector('.ts-left .ts-card'), el.querySelector('.ts-right .ts-card')];
+  const sides = [el.querySelector('.ts-left'), el.querySelector('.ts-right')];
+  const chips = Array.from(el.querySelectorAll('.ts-chip'));
+  const render = () => {
+    if (mode === 'career') {
+      const oppLadder = TEAMS.filter((t) => t.id !== TEAMS[picks[0]].id).sort((a, b) => teamOverall(a) - teamOverall(b));
+      picks[1] = TEAMS.indexOf(oppLadder[0]);
     }
-    this.pressed.clear();
-    this.released.clear();
-    return out;
-  }
-               }
+    cards[0].innerHTML = teamCard(TEAMS[picks[0]]);
+    cards[1].innerHTML = teamCard(TEAMS[picks[1]], { cls: 'cpu' });
+    sides.forEach((s, i) => s.classList.toggle('active', i === side));
+    chips.forEach((c, i) => {
+      c.classList.toggle('sel-a', i === picks[0]);
+      c.classList.toggle('sel-b', i === picks[1]);
+    });
+  };
+  const cycle = (dir) => {
+    let n = picks[side];
+    do n = (n + dir + TEAMS.length) % TEAMS.length;
+    while (n === picks[1 - side]);
+    picks[side] = n;
+    app.audio.uiMove();
+    render();
+  };
+  chips.forEach((c) =>
+    c.addEventListener('click', () => {
+      const i = parseInt(c.dataset.i, 10);
+      if (i === picks[1 - side]) return;
+      picks[side] = i;
+      app.audio.uiMove();
+      render();
+    }),
+  );
+  sides.forEach((s, i) =>
+    s.addEventListener('click', () => {
+      if (mode === 'career' && i === 1) return;
+      side = i;
+      render();
+    }),
+  );
+  const start = () => {
+    app.audio.uiConfirm();
+    app.state.settings.difficulty = el.querySelector('.diff-sel').value;
+    app.save();
+    const home = TEAMS[picks[0]];
+    const away = TEAMS[picks[1]];
+    if (mode === 'career') app.startCareer(home.id);
+    else app.startMatch({ home, away, userTeam: mode === 'versus' ? null : 0, mode });
+  };
+  el.querySelector('.start-btn').addEventListener('click', start);
+  el.querySelector('.diff-sel').addEventListener('change', (e) => {
+    app.state.settings.difficulty = e.target.value;
+    app.save();
+  });
+  render();
+  return {
+    el,
+    onNav(n) {
+      if (n.left) cycle(-1);
+      if (n.right) cycle(1);
+      if ((n.up || n.down) && mode !== 'career') {
+        side = 1 - side;
+        app.audio.uiMove();
+        render();
+      }
+      if (n.confirm) start();
+      if (n.back) {
+        app.audio.uiBack();
+        app.go('title');
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Career hub
+// ---------------------------------------------------------------------------
+
+export function CareerScreen(app) {
+  const c = app.state.career;
+  const team = TEAM_BY_ID[c.teamId];
+  const opp = currentOpponent(c);
+  const ladder = c.ladder
+    .map((id, i) => {
+      const t = TEAM_BY_ID[id];
+      const st = i < c.stage ? 'done' : i === c.stage ? 'now' : 'locked';
+      return `<li class="ladder-item ${st}" style="--c1:${t.primary};--c3:${t.accent}"><span class="li-n">${i + 1}</span><span class="li-abbr">${t.abbr}</span><span class="li-name">${t.city} ${t.name}</span><span class="li-ovr">OVR ${teamOverall(t)}</span><span class="li-state">${st === 'done' ? 'BEAT' : st === 'now' ? 'NEXT' : ''}</span></li>`;
+    })
+    .join('');
+  const el = h(`
+    <section class="screen career" style="--c1:${team.primary};--c2:${team.secondary};--c3:${team.accent}">
+      <header class="screen-head"><h1>RUN THE STREETS</h1><div class="head-sub">${team.city} ${team.name} · ${careerTitle(c)} · REP ${c.rep} · ${c.wins}W ${c.losses}L</div></header>
+      <div class="career-body">
+        <div class="career-left">
+          <div class="career-next">
+            ${c.complete ? `<div class="cn-title">YOU RUN THIS CITY</div><div class="cn-sub">Every crew beaten. Legend difficulty unlocked.</div>` : `<div class="cn-title">NEXT UP</div>${teamCard(opp, { cls: 'cpu' })}<div class="cn-court">@ ${opp.city.toUpperCase()} · THEIR SPHERE</div>`}
+          </div>
+          ${menuList([
+            ...(c.complete ? [] : [{ action: 'play', label: 'PLAY NEXT GAME', sub: `${DIFFICULTY[c.difficulty].label} difficulty` }]),
+            { action: 'roster', label: 'MY CREW' },
+            { action: 'abandon', label: 'ABANDON RUN', sub: 'Deletes career progress' },
+            { action: 'back', label: 'BACK' },
+          ])}
+        </div>
+        <div class="career-right"><div class="ladder-title">THE LADDER</div><ol class="ladder">${ladder}</ol></div>
+      </div>
+    </section>`);
+  const menu = wireMenu(el, (action) => {
+    if (action === 'play') app.startMatch({ home: opp, away: team, userTeam: 1, mode: 'career' });
+    else if (action === 'roster') app.go('roster', { teamId: team.id, back: 'career' });
+    else if (action === 'abandon') {
+      if (confirm('Abandon this run? Progress will be deleted.')) {
+        app.state.career = null;
+        app.save();
+        app.go('title');
+      }
+    } else if (action === 'back') app.go('title');
+  }, app);
+  return {
+    el,
+    onNav(n) {
+      menu.nav(n);
+      if (n.back) app.go('title');
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Roster viewer
+// ---------------------------------------------------------------------------
+
+export function RosterScreen(app, params) {
+  const team = TEAM_BY_ID[params.teamId];
+  const KEYS = { spd: 'SPD', sht: 'SHT', hnd: 'HND', pas: 'PAS', tkl: 'TKL', pow: 'POW', end: 'END', cat: 'CAT', blk: 'BLK' };
+  const bars = (p) => (p.role === 'GK' ? ['spd', 'cat', 'blk', 'pow', 'pas', 'end'] : ['spd', 'sht', 'hnd', 'pas', 'tkl', 'pow', 'end']).map((k) => `<div class="stat"><span class="stat-k">${KEYS[k]}</span><div class="stat-bar"><div style="width:${p[k]}%"></div></div><span class="stat-v">${p[k]}</span></div>`).join('');
+  const el = h(`
+    <section class="screen roster" style="--c1:${team.primary};--c2:${team.secondary};--c3:${team.accent}">
+      <header class="screen-head"><h1>${team.city.toUpperCase()} ${team.name.toUpperCase()}</h1><div class="head-sub">“${team.motto}” · OVR ${teamOverall(team)}</div></header>
+      <div class="roster-grid">
+        ${[...starters(team), ...team.roster.filter((p) => !starters(team).includes(p))].map((p, i) => `<div class="pcard-big ${i < 4 ? 'starter' : 'sub'}"><div class="pb-num">#${p.number}</div><div class="pb-nick">${p.nick}</div><div class="pb-name">${p.name}</div><div class="pb-arch">${p.archetype} · OVR ${playerOverall(p)}</div><div class="pb-sig">GB: ${p.signature}</div><div class="pb-stats">${bars(p)}</div></div>`).join('')}
+      </div>
+      <footer class="screen-foot"><button class="btn back-btn">BACK</button></footer>
+    </section>`);
+  el.querySelector('.back-btn').addEventListener('click', () => app.go(params.back || 'title'));
+  return { el, onNav: (n) => (n.back || n.confirm) && app.go(params.back || 'title') };
+}
+
+// ---------------------------------------------------------------------------
+// How to play
+// ---------------------------------------------------------------------------
+
+export function HowToScreen(app) {
+  const el = h(`
+    <section class="screen howto">
+      <header class="screen-head"><h1>HOW TO PLAY</h1><div class="head-sub">Pool rules. Style wins matches.</div></header>
+      <div class="howto-cols">
+        <div class="howto-col">
+          <h2>RULES</h2>
+          <ul>
+            <li><b>3-on-3 plus keepers</b> inside a sphere of water. Two halves of 2:30. Most goals wins; level at full time = <b>golden-goal overtime</b>.</li>
+            <li><b>20-second possession clock.</b> Shoot before it runs out or the ball goes over.</li>
+            <li><b>Keepers</b> guard the ring and must release the ball within 4 seconds.</li>
+            <li><b>Mercy rule.</b> Go up by 8 in the second half and it's over.</li>
+            <li><b>No refs.</b> Hit people. Wash defenders. Nobody's calling anything.</li>
+          </ul>
+          <h2>STYLE & GAMEBREAKER</h2>
+          <ul>
+            <li>Tricks, washes, tackles, big hits, blocks, saves, volleys and long-range goals earn <b>Style</b>.</li>
+            <li>Chain moves fast for a <b>combo multiplier</b>. Turnovers drain the meter.</li>
+            <li>Fill the meter and press <b>E</b> (LT+RT) with the ball to unleash a <b>GAMEBREAKER</b>: an unstoppable signature shot worth <b>2 goals that also takes 1 off their score</b>.</li>
+            <li>Two straight goals and your crew is <b>ON FIRE</b>: sharper shooting, harder to tackle.</li>
+          </ul>
+        </div>
+        <div class="howto-col">
+          <h2>CONTROLS</h2>
+          <table class="ctrl">
+            <tr><th></th><th>KEYBOARD</th><th>GAMEPAD</th></tr>
+            <tr><td>Swim</td><td>WASD / Arrows</td><td>Left stick</td></tr>
+            <tr><td>Turbo</td><td>SHIFT</td><td>RT / RB</td></tr>
+            <tr><td>Shoot (hold to charge, release on PERFECT)</td><td>J / SPACE</td><td>A / ✕</td></tr>
+            <tr><td>Pass · Lob for a volley (hold turbo)</td><td>K</td><td>X / ▢</td></tr>
+            <tr><td>Trick (with ball) / Tackle (defense)</td><td>L</td><td>B / ○</td></tr>
+            <tr><td>Big hit</td><td>I</td><td>Y / △</td></tr>
+            <tr><td>Breach (leap) / Block / Volley a loose ball</td><td>U or J on defense</td><td>A / ✕ on defense</td></tr>
+            <tr><td>Switch swimmer</td><td>Q / TAB</td><td>LB</td></tr>
+            <tr><td>Gamebreaker</td><td>E</td><td>LT + RT</td></tr>
+            <tr><td>Pause</td><td>ESC</td><td>START</td></tr>
+          </table>
+          <h2>TIPS</h2>
+          <ul>
+            <li>Hold a direction + trick with <b>turbo</b> for a bigger move and a better chance of <b>washing</b> the defender.</li>
+            <li>Release the shot when the charge hits the <b>PERFECT</b> window — timing beats ratings.</li>
+            <li>Shift+K lobs to a teammate near the ring: they breach and <b>volley</b> it first time. Volley goals are worth big style.</li>
+            <li>Defenders tackle. Strikers shoot. Keepers save. Play your crew.</li>
+          </ul>
+        </div>
+      </div>
+      <footer class="screen-foot"><button class="btn back-btn">BACK</button></footer>
+    </section>`);
+  el.querySelector('.back-btn').addEventListener('click', () => app.go('title'));
+  return { el, onNav: (n) => (n.back || n.confirm) && app.go('title') };
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+export function SettingsScreen(app, params = {}) {
+  const s = app.state.settings;
+  const row = (key, label, kind, opts) => {
+    if (kind === 'range') return `<div class="set-row" data-key="${key}"><span class="set-label">${label}</span><input type="range" min="0" max="1" step="0.05" value="${s[key]}"><span class="set-val">${Math.round(s[key] * 100)}%</span></div>`;
+    if (kind === 'select') return `<div class="set-row" data-key="${key}"><span class="set-label">${label}</span><select>${opts.map((o) => `<option value="${o[0]}" ${s[key] === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div>`;
+    if (kind === 'toggle') return `<div class="set-row" data-key="${key}"><span class="set-label">${label}</span><input type="checkbox" ${s[key] ? 'checked' : ''}></div>`;
+    return '';
+  };
+  const el = h(`
+    <section class="screen settings">
+      <header class="screen-head"><h1>SETTINGS</h1><div class="head-sub">Saved automatically</div></header>
+      <div class="set-list">
+        ${row('masterVolume', 'MASTER VOLUME', 'range')}
+        ${row('musicVolume', 'MUSIC', 'range')}
+        ${row('sfxVolume', 'SFX & CROWD', 'range')}
+        ${row('quality', 'GRAPHICS', 'select', [['low', 'LOW (no shadows / bloom)'], ['medium', 'MEDIUM'], ['high', 'HIGH']])}
+        ${row('difficulty', 'DEFAULT DIFFICULTY', 'select', Object.entries(DIFFICULTY).map(([k, v]) => [k, v.label]))}
+        ${row('commentary', 'COMMENTARY', 'toggle')}
+        ${row('screenShake', 'SCREEN SHAKE', 'toggle')}
+      </div>
+      <div class="set-actions"><button class="btn danger reset-btn">RESET ALL DATA</button><button class="btn back-btn">BACK</button></div>
+    </section>`);
+  el.querySelectorAll('.set-row').forEach((r) => {
+    const key = r.dataset.key;
+    const input = r.querySelector('input,select');
+    input.addEventListener('input', () => {
+      if (input.type === 'range') {
+        s[key] = parseFloat(input.value);
+        r.querySelector('.set-val').textContent = `${Math.round(s[key] * 100)}%`;
+        app.audio.applyVolumes();
+        if (key !== 'musicVolume') app.audio.uiMove();
+      } else if (input.type === 'checkbox') s[key] = input.checked;
+      else s[key] = input.value;
+      app.save();
+    });
+  });
+  el.querySelector('.back-btn').addEventListener('click', () => app.go(params.back || 'title'));
+  el.querySelector('.reset-btn').addEventListener('click', () => {
+    if (confirm('Delete all saved data (career, records, settings)?')) app.resetAll();
+  });
+  return { el, onNav: (n) => n.back && app.go(params.back || 'title') };
+}
+
+// ---------------------------------------------------------------------------
+// Results
+// ---------------------------------------------------------------------------
+
+export function ResultsScreen(app, params) {
+  const { sim, mode, userTeam, careerResult } = params;
+  const [h0, a0] = sim.teams;
+  const won = userTeam === null ? null : sim.winner === userTeam;
+  const rows = (team) =>
+    sim
+      .teamPlayers(team)
+      .map((p) => `<tr><td class="r-name"><b>${p.data.nick}</b> ${p.data.name}${p.isKeeper ? ' <i>GK</i>' : ''}</td><td>${p.stats.goals}</td><td>${p.stats.sog}/${p.stats.sh
