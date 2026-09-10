@@ -245,3 +245,32 @@ test('keeper must release the ball within the hold limit', () => {
   while (!released && n++ < 60 * (RULES.keeperHold + 2)) sim.step(DT);
   assert.ok(released, 'keeper distributed the ball');
 });
+
+test('keepers dive vertically inside their box and never leave the pool', () => {
+  const sim = new MatchSim({ home: TEAMS[0], away: TEAMS[1], difficulty: 'pro', seed: 4242, userTeam: null });
+  while (sim.state !== 'live') sim.step(DT);
+  const shooter = sim.outfield(0)[0];
+  const gk = sim.keeperOf(1);
+  // Wound up a shot by hand so the flight is known: hard, high, straight at the ring.
+  sim.giveBall(shooter);
+  shooter.pos.set(6, 0, 0.4);
+  sim.ball.holder = null;
+  shooter.hasBall = false;
+  sim.ball.pos.set(6, 0.9, 0.4);
+  sim.ball.vel.set(20, 3.4, 0);
+  sim.ball.flight = { kind: 'shot', shooter, gb: false, volley: false, quality: 1, dist: 5.6, t: 0, checked: new Set(), name: 'TEST' };
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let maxZ = 0;
+  for (let i = 0; i < 90 && sim.ball.flight?.kind === 'shot'; i++) {
+    sim.step(DT);
+    minY = Math.min(minY, gk.y);
+    maxY = Math.max(maxY, gk.y);
+    maxZ = Math.max(maxZ, Math.abs(gk.pos.z));
+    assert.ok(gk.y >= ARENA.keeperMinY - 1e-6 && gk.y <= ARENA.keeperMaxY + 1e-6, `keeper y ${gk.y} in box`);
+    assert.ok(Math.abs(gk.pos.x) >= ARENA.keeperMinX - 0.05 && Math.abs(gk.pos.x) <= ARENA.keeperMaxX + 0.05, 'keeper x in box');
+    assert.ok(maxZ <= ARENA.keeperMaxZ + 1e-6, `keeper z ${gk.pos.z} in box`);
+    assert.ok(gk.pos.isFinite() && Number.isFinite(gk.y), 'keeper finite');
+  }
+  assert.ok(maxY - minY > 0.05, `keeper dived vertically (range ${(maxY - minY).toFixed(3)})`);
+});

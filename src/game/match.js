@@ -336,6 +336,7 @@ export class MatchSim {
 
   tickCooldowns(p, dt) {
     for (const k in p.cd) if (p.cd[k] > 0) p.cd[k] -= dt;
+    if (p.ai.diving > 0) p.ai.diving = Math.max(0, p.ai.diving - dt); // lunge window (pickup bonus)
     if (p.comboTimer > 0) {
       p.comboTimer -= dt;
       if (p.comboTimer <= 0) p.combo = 0;
