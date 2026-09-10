@@ -126,7 +126,7 @@ class App {
     if (this.match) this.endMatch();
     const wrap = document.createElement('div');
     wrap.className = 'match-wrap';
-    wrap.innerHTML = `<canvas class="game-canvas"></canvas><div class="hud"></div><div class="tip-overlay"><div class="tip-box"><div class="tip-teams"><span style="--c1:${home.primary}">${home.city} ${home.name}</span><em>VS</em><span style="--c1:${away.primary}">${away.city} ${away.name}</span></div><div class="tip-rule">FIRST TO 21 · WIN BY 2 · ${mode === 'career' ? 'THEIR COURT' : home.city.toUpperCase()}</div></div></div>`;
+    wrap.innerHTML = `<canvas class="game-canvas"></canvas><div class="hud"></div><div class="tip-overlay"><div class="tip-box"><div class="tip-teams"><span style="--c1:${home.primary}">${home.city} ${home.name}</span><em>VS</em><span style="--c1:${away.primary}">${away.city} ${away.name}</span></div><div class="tip-rule">TWO HALVES · MOST GOALS WINS · ${mode === 'career' ? 'THEIR SPHERE' : `${home.city.toUpperCase()} SPHERE`}</div></div></div>`;
     this.root.appendChild(wrap);
     const canvas = wrap.querySelector('.game-canvas');
     const difficulty = mode === 'career' && this.state.career ? this.state.career.difficulty : this.state.settings.difficulty;
@@ -143,7 +143,7 @@ class App {
       return;
     }
     const hud = new HUD(wrap.querySelector('.hud'), sim);
-    hud.setHint(userTeam === null ? 'WATCHING · ESC to leave' : 'WASD move · SHIFT turbo · J shoot · K pass · L trick/steal · I shove · E gamebreaker');
+    hud.setHint(userTeam === null ? 'WATCHING · ESC to leave' : 'WASD move · SHIFT turbo · J hold/release shoot · K pass (SHIFT+K lob) · L trick/tackle · I hit · U breach · E gamebreaker');
     const commentary = new Commentary(sim, (line, pr) => {
       if (this.state.settings.commentary) hud.ticker(line, pr);
     });
@@ -162,31 +162,35 @@ class App {
   bindMatchAudio(sim, renderer) {
     const a = this.audio;
     const ev = sim.events;
-    ev.on('bounce', ({ speed }) => a.bounce(Math.min(1, speed / 4)));
-    ev.on('swish', () => {
+    ev.on('wall', ({ speed }) => a.bounce(Math.min(1, speed / 6)));
+    ev.on('post', ({ hard }) => a.rim(hard));
+    ev.on('score', ({ gb }) => {
       a.swish();
-      a.crowdSwell(0.7);
-    });
-    ev.on('rim', ({ hard }) => a.rim(hard));
-    ev.on('board', () => a.board());
-    ev.on('dunk', () => {
       a.slam();
-      a.crowdSwell(1.2);
+      a.crowdSwell(gb ? 1.5 : 1.1);
+      if (gb) a.stinger('gb');
     });
-    ev.on('shot', () => a.whoosh(1.1));
+    ev.on('save', ({ big }) => {
+      a.blockHit();
+      a.crowdSwell(big ? 1.1 : 0.6);
+    });
+    ev.on('shot', ({ gb }) => a.whoosh(gb ? 0.7 : 1.1));
     ev.on('pass', ({ alley }) => a.whoosh(alley ? 0.8 : 1.4));
-    ev.on('fence', () => a.fence());
     ev.on('knockdown', () => {
       a.thud();
       a.crowdSwell(0.5);
     });
-    ev.on('ankle', () => {
+    ev.on('washed', () => {
       a.stinger('big');
       a.crowdSwell(1.3);
     });
-    ev.on('steal', () => {
+    ev.on('tackle', () => {
       a.stealHit();
       a.crowdSwell(0.6);
+    });
+    ev.on('bighit', () => {
+      a.thud();
+      a.crowdSwell(0.8);
     });
     ev.on('block', () => {
       a.blockHit();
@@ -201,24 +205,23 @@ class App {
       a.crowdSwell(1.5);
     });
     ev.on('trick', ({ turbo }) => {
-      a.sneakerSqueak();
-      if (turbo) a.whoosh(1.6);
+      a.whoosh(turbo ? 1.6 : 1.2);
     });
-    ev.on('jump', () => a.sneakerSqueak());
+    ev.on('breach', () => a.whoosh(0.9));
+    ev.on('splash', () => a.bounce(0.4));
     ev.on('miss', ({ type }) => {
-      if (type !== 'lob') a.crowdGroan();
+      if (type !== 'blocked') a.crowdGroan();
     });
     ev.on('turnover', () => a.whistle());
     ev.on('violation', () => a.whistle());
     ev.on('shotclock', () => a.buzzer());
+    ev.on('horn', () => a.buzzer());
+    ev.on('halftime', () => a.crowdSwell(0.8));
+    ev.on('overtime', () => a.stinger('gb'));
     ev.on('gameover', () => {
       a.buzzer();
       a.crowdSwell(2);
     });
-    ev.on('score', ({ gb }) => {
-      if (gb) a.stinger('gb');
-    });
-    // Ball dribble tick from the renderer (when held & bouncing)
     this._dribbleT = 0;
   }
 
@@ -288,8 +291,9 @@ class App {
       else rec.losses++;
       rec.styleBest = Math.max(rec.styleBest, myStyle);
       rec.gamebreakers += sim.teamPlayers(m.userTeam).reduce((s, p) => s + p.stats.gb, 0);
-      rec.dunks += sim.teamPlayers(m.userTeam).reduce((s, p) => s + p.stats.dunks, 0);
-      rec.ankles += sim.teamPlayers(m.userTeam).reduce((s, p) => s + p.stats.ankles, 0);
+      rec.goals = (rec.goals || 0) + sim.score[m.userTeam];
+      rec.saves = (rec.saves || 0) + sim.teamPlayers(m.userTeam).reduce((s, p) => s + p.stats.saves, 0);
+      rec.washed = (rec.washed || 0) + sim.teamPlayers(m.userTeam).reduce((s, p) => s + p.stats.washed, 0);
       rec.bestMargin = Math.max(rec.bestMargin, margin);
       if (m.mode === 'career' && this.state.career) {
         const c = this.state.career;
@@ -356,18 +360,18 @@ class App {
         input.shootReleased = false;
         input.pass = false;
         input.trick = false;
-        input.shove = false;
-        input.jump = false;
+        input.hit = false;
+        input.breach = false;
         input.switchPlayer = false;
         input.gamebreaker = false;
       }
-      // Dribble sound
-      const holder = m.sim.ball.holder;
-      if (holder && (holder.state === 'idle' || holder.state === 'run')) {
+      // Swim stroke sound for the controlled / carrying swimmer
+      const swimmer = m.sim.controlled || m.sim.ball.holder;
+      if (swimmer && swimmer.state === 'swim' && swimmer.speedNorm > 0.25) {
         this._dribbleT -= dt;
         if (this._dribbleT <= 0) {
-          this.audio.dribble();
-          this._dribbleT = holder.speedNorm > 0.2 ? 0.28 : 0.45;
+          this.audio.stroke(swimmer.turboActive ? 1 : 0.6);
+          this._dribbleT = swimmer.turboActive ? 0.3 : 0.5;
         }
       }
       m.renderer.update(dt);
