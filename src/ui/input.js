@@ -183,4 +183,4 @@ export class InputManager {
     this.released.clear();
     return out;
   }
-        }
+}
