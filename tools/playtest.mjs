@@ -37,7 +37,7 @@ await page.evaluate(async (userTeam, mode) => {
 
 await page.evaluate((n) => { window.__stepsPerIter = n; }, parseInt(process.env.STEPS || '240', 10));
 let i = 0;
-const keys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'KeyJ', 'KeyK', 'KeyL', 'KeyI', 'KeyE', 'Tab'];
+const keys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'KeyJ', 'KeyK', 'KeyL', 'KeyI', 'KeyU', 'KeyE', 'Tab'];
 for (;;) {
   // Advance ~4 sim seconds (240 fixed steps) via the app's own loop path when possible.
   const snap = await page.evaluate((userMode) => {
@@ -64,7 +64,7 @@ for (;;) {
     const mv = keys[Math.floor(Math.random() * 4)];
     await page.keyboard.down(mv);
     if (Math.random() < 0.5) await page.keyboard.down('ShiftLeft');
-    const act = keys[5 + Math.floor(Math.random() * 6)];
+    const act = keys[5 + Math.floor(Math.random() * 7)];
     await page.keyboard.press(act);
   }
   await new Promise((r) => setTimeout(r, 150));
