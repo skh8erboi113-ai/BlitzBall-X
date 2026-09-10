@@ -114,6 +114,11 @@ export class AudioSystem {
     this.tone({ freq: 140, type: 'sine', dur: 0.09, vol: 0.14, slide: 60 });
   }
 
+  /** Underwater swim stroke: a soft low-passed swoosh. */
+  stroke(strength = 0.6) {
+    this.noise({ dur: 0.22, vol: 0.09 * strength, filter: 380, slide: 900, q: 0.5, type: 'lowpass', attack: 0.04 });
+  }
+
   swish() {
     this.noise({ dur: 0.35, vol: 0.4, filter: 3200, q: 0.6, type: 'highpass' });
     this.noise({ dur: 0.25, vol: 0.2, filter: 1200, q: 0.4, type: 'bandpass' });
