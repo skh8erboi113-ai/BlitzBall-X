@@ -88,6 +88,7 @@ npm test                        # unit + simulation tests
 npm run sim -- 24 pro           # 24 headless CPU matches; exits 1 if any match stalls
 npm run qa:screens -- http://localhost:4173/ screenshots/screens   # walk every screen headlessly
 npm run qa:play -- http://localhost:4173/ screenshots/prod         # scripted playtest to results
+npm run qa:probe -- http://localhost:4173/                         # repeat matches: GPU contexts, heap, frame time
 ```
 
 CI (`.github/workflows/ci.yml`) runs the tests, the simulation sweep and a production build.

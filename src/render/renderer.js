@@ -162,17 +162,20 @@ export class MatchRenderer {
   }
 
   bindEvents() {
+    this._unsubs = [];
     const ev = this.sim.events;
     const team = (t) => this.sim.teams[t];
     const bp = () => ({ x: this.sim.ball.pos.x, y: this.sim.ball.pos.y, z: this.sim.ball.pos.z });
-    ev.on('wall', ({ pos, speed }) => {
+    // Recorded so dispose() can detach cleanly (a disposed renderer has no FX to drive).
+    const on = (type, fn) => this._unsubs.push(ev.on(type, fn));
+    on('wall', ({ pos, speed }) => {
       this.fx.bubbles(pos, Math.min(14, 3 + speed), Math.min(1.4, speed * 0.2), pos.y);
     });
-    ev.on('post', ({ pos, hard }) => {
+    on('post', ({ pos, hard }) => {
       this.fx.sparks(pos, '#ffd23f', hard ? 16 : 8);
       this.gameCam.punch(hard ? 0.35 : 0.15);
     });
-    ev.on('score', ({ player, gb, team: t }) => {
+    on('score', ({ player, gb, team: t }) => {
       this.gameCam.setMode('score', gb ? 2.0 : 1.3, player);
       const gi = this.goalIndexFor(t);
       this.goalPulse[gi] = 1;
@@ -185,54 +188,61 @@ export class MatchRenderer {
         this.gameCam.punch(1.2);
       } else this.gameCam.punch(0.5);
     });
-    ev.on('save', ({ keeper, big }) => {
+    on('save', ({ keeper, big }) => {
       this.fx.burst(bp(), '#ffffff', big ? 26 : 14, 3.5, 0.2);
       this.fx.bubbles(keeper.pos, 12, 1.2, 0.8);
       this.gameCam.punch(big ? 0.5 : 0.25);
       this.crowdEnergy = Math.max(this.crowdEnergy, big ? 0.9 : 0.6);
     });
-    ev.on('knockdown', ({ victim, reason }) => {
+    on('knockdown', ({ victim, reason }) => {
       this.fx.bubbles(victim.pos, 14, 1.4, 0.5);
       this.gameCam.punch(reason === 'hit' ? 0.5 : 0.3);
     });
-    ev.on('washed', ({ player, victim }) => {
+    on('washed', ({ player, victim }) => {
       this.fx.burst({ x: victim.pos.x, y: 0.8, z: victim.pos.z }, team(player.team).accent, 26, 3.5, 0.18);
       this.fx.shockwave(victim.pos, team(player.team).accent, 3, 0.45);
       this.crowdEnergy = 1;
     });
-    ev.on('block', () => {
+    on('block', () => {
       this.gameCam.punch(0.6);
       this.fx.burst(bp(), '#ffffff', 20, 4, 0.2);
       this.crowdEnergy = 1;
     });
-    ev.on('tackle', ({ player }) => {
+    on('tackle', ({ player }) => {
       this.fx.burst({ x: player.pos.x, y: 1.0, z: player.pos.z }, team(player.team).accent, 14, 2.5, 0.15);
       this.crowdEnergy = Math.max(this.crowdEnergy, 0.7);
     });
-    ev.on('bighit', ({ player, victim }) => {
+    on('bighit', ({ player, victim }) => {
       this.gameCam.punch(0.7);
       this.fx.burst({ x: victim.pos.x, y: 1.0, z: victim.pos.z }, '#ffffff', 16, 3, 0.16);
       this.fx.shockwave(victim.pos, team(player.team).accent, 2.5, 0.35);
       this.crowdEnergy = Math.max(this.crowdEnergy, 0.8);
     });
-    ev.on('shot', ({ player, gb, volley }) => {
+    on('shot', ({ player, gb, volley }) => {
       this.fx.bubbles(player.pos, gb ? 24 : 8, gb ? 2 : 1, 0.9);
       if (volley || gb) this.gameCam.setMode('goalcam', gb ? 1.8 : 1.2, player);
     });
-    ev.on('breach', ({ player }) => this.fx.bubbles(player.pos, 10, 1.1, 0.2));
-    ev.on('splash', ({ pos, size }) => this.fx.bubbles(pos, 6, size, 0.1));
-    ev.on('alleyoop', ({ finisher }) => this.gameCam.setMode('goalcam', 1.4, finisher));
-    ev.on('gamebreaker', ({ player }) => {
+    on('breach', ({ player }) => this.fx.bubbles(player.pos, 10, 1.1, 0.2));
+    on('splash', ({ pos, size }) => this.fx.bubbles(pos, 6, size, 0.1));
+    on('alleyoop', ({ finisher }) => this.gameCam.setMode('goalcam', 1.4, finisher));
+    on('gamebreaker', ({ player }) => {
       this.gameCam.setMode('gamebreaker', 3.0, player);
       this.gbFlash = 1;
       this.fx.shockwave(player.pos, team(player.team).accent, 7, 0.8);
       this.crowdEnergy = 1;
     });
-    ev.on('gbshot', ({ player }) => this.gameCam.setMode('goalcam', 1.8, player));
-    ev.on('trick', ({ player, turbo }) => {
+    on('gbshot', ({ player }) => this.gameCam.setMode('goalcam', 1.8, player));
+    on('trick', ({ player, turbo }) => {
       this.fx.bubbles(player.pos, turbo ? 12 : 6, turbo ? 1.4 : 0.8, 0.4);
     });
-    ev.on('reset', () => this.gameCam.setMode('play', 0));
+    on('reset', () => this.gameCam.setMode('play', 0));
+  }
+
+  /** Detach every sim listener registered by bindEvents(). */
+  unbindEvents() {
+    if (!this._unsubs) return;
+    for (const off of this._unsubs) off();
+    this._unsubs = [];
   }
 
   resize() {
@@ -334,8 +344,36 @@ export class MatchRenderer {
     this.composer.render();
   }
 
+  /**
+   * Release everything this match allocated. A match builds a whole scene (geometries, toon
+   * materials, canvas textures, shadow maps, bloom render targets) plus its own WebGL context,
+   * and the app creates a fresh one for every game — without this the GPU keeps paying for
+   * matches that are long over, and browsers eventually start evicting live contexts.
+   *
+   * Note: texture maps are deliberately NOT disposed one by one. Several of them (toon gradient,
+   * particle sprite, shadow blob) are module-level caches shared by every match, while the rest
+   * live on the GPU and are reclaimed wholesale by forceContextLoss() below.
+   */
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.unbindEvents();
+    this.composer?.dispose();
+    this.scene?.traverse((obj) => {
+      obj.geometry?.dispose?.();
+      for (const mat of Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : []) {
+        for (const key in mat) {
+          const v = mat[key];
+          if (v && v.isRenderTarget) v.dispose?.();
+        }
+        mat.dispose?.();
+      }
+    });
+    this.scene?.clear();
+    this.views?.clear();
+    this.fx = null;
     this.renderer.dispose();
+    this.renderer.forceContextLoss(); // frees the GL context + all GPU resources it owns
   }
 }
 

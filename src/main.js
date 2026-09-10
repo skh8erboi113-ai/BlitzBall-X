@@ -12,6 +12,7 @@ import { AudioSystem } from './ui/audio.js';
 import { HUD } from './ui/hud.js';
 import { Commentary } from './ui/commentary.js';
 import { loadState, saveState, clearState } from './ui/save.js';
+import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { createCareer, currentOpponent, recordResult, careerTitle } from './game/career.js';
 import { TEAMS, TEAM_BY_ID } from './data/teams.js';
 import { PHYS } from './data/constants.js';
@@ -143,11 +144,24 @@ class App {
       return;
     }
     const hud = new HUD(wrap.querySelector('.hud'), sim);
-    hud.setHint(userTeam === null ? 'WATCHING · ESC to leave' : 'WASD move · SHIFT turbo · J hold/release shoot · K pass (SHIFT+K lob) · L trick/tackle · I hit · U breach · E gamebreaker');
     const commentary = new Commentary(sim, (line, pr) => {
       if (this.state.settings.commentary) hud.ticker(line, pr);
     });
-    this.match = { sim, renderer, hud, commentary, wrap, mode, userTeam, home, away, paused: false, tipTimer: 2.2, finished: false, resultsTimer: 0 };
+    this.match = { sim, renderer, hud, commentary, wrap, mode, userTeam, home, away, paused: false, tipTimer: 2.2, finished: false, resultsTimer: 0, touchControls: null };
+    // On-screen controls for touch devices (and anyone who forces them on in Settings).
+    if (this.touchEnabled()) {
+      this.match.touchControls = new TouchControls(wrap, this.input, { onPause: () => this.pause() });
+      wrap.classList.add('touch');
+    }
+    hud.setHint(
+      userTeam === null
+        ? this.touchEnabled()
+          ? 'WATCHING'
+          : 'WATCHING · ESC to leave'
+        : this.touchEnabled() || isTouchDevice()
+          ? 'LEFT STICK move · SHOOT hold, release in the PERFECT window · TURBO to burn meters'
+          : 'WASD move · SHIFT turbo · J hold/release shoot · K pass (SHIFT+K lob) · L trick/tackle · I hit · U breach · E gamebreaker',
+    );
     this.bindMatchAudio(sim, renderer);
     if (this.audio.unlocked) {
       this.audio.startBeat('match');
@@ -157,6 +171,14 @@ class App {
     setTimeout(() => wrap.querySelector('.tip-overlay')?.classList.add('out'), 1800);
     this.accum = 0;
     this.lastT = performance.now();
+  }
+
+  /** Should the on-screen touch controls be shown for this match? */
+  touchEnabled() {
+    const mode = this.state.settings.touchControls || 'auto';
+    if (mode === 'off') return false;
+    if (mode === 'on') return true;
+    return isTouchDevice();
   }
 
   bindMatchAudio(sim, renderer) {
@@ -268,6 +290,7 @@ class App {
 
   endMatch() {
     if (!this.match) return;
+    this.match.touchControls?.dispose();
     this.match.renderer.dispose();
     this.match.wrap.remove();
     this.match = null;
@@ -309,6 +332,7 @@ class App {
     setTimeout(() => {
       if (!this.match) return;
       const params = { sim, mode: m.mode, userTeam: m.userTeam, careerResult };
+      this.match.touchControls?.dispose();
       this.match.renderer.dispose();
       this.match.wrap.remove();
       this.match = null;
@@ -365,6 +389,11 @@ class App {
         input.switchPlayer = false;
         input.gamebreaker = false;
       }
+      // Only release latched edges once a step has actually consumed them, otherwise a tap that
+      // lands on a frame with no fixed step (120 Hz displays) is silently dropped.
+      if (n > 0) this.input.flushOneShots();
+      // Light up the Gamebreaker button as soon as the controlled side's meter is full.
+      if (m.touchControls && m.userTeam !== null) m.touchControls.setGamebreakerReady(!!m.sim.gbReady[m.userTeam]);
       // Swim stroke sound for the controlled / carrying swimmer
       const swimmer = m.sim.controlled || m.sim.ball.holder;
       if (swimmer && swimmer.state === 'swim' && swimmer.speedNorm > 0.25) {

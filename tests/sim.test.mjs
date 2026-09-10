@@ -205,6 +205,39 @@ test('user-controlled team with random input finishes without errors', () => {
   assert.ok(sim.controlled && sim.controlled.team === 1);
 });
 
+test('user one-shot input survives a controlled-player switch (input structs are copied, not aliased)', () => {
+  const sim = new MatchSim({ home: TEAMS[0], away: TEAMS[1], difficulty: 'pro', seed: 11, userTeam: 0 });
+  let guard = 0;
+  while (sim.state !== 'live' && guard++ < 600) sim.step(DT);
+  // One reusable struct, like the app's input manager hands the sim every frame.
+  const inp = emptyInput();
+  const clear = (p) => { for (const k in p.cd) p.cd[k] = 0; sim.setState(p, 'idle'); p.stun = 0; p.airborne = false; return p; };
+
+  const a = clear(sim.outfield(0)[0]);
+  sim.giveBall(a);
+  inp.trick = true;
+  sim.setUserInput(inp);
+  sim.step(DT);
+  assert.equal(a.state, 'trick', 'trick fires for the first controlled carrier');
+
+  // Hand control to a team-mate: the previous carrier becomes an AI swimmer. Its AI tick must
+  // not be able to clear the live user input (that used to eat every later one-shot action).
+  const b = clear(sim.outfield(0)[1]);
+  sim.giveBall(b);
+  inp.trick = true;
+  sim.setUserInput(inp);
+  sim.step(DT);
+  assert.equal(b.state, 'trick', 'trick still fires after the controlled player changes');
+
+  const c = clear(sim.outfield(0)[2]);
+  sim.giveBall(c);
+  inp.trick = false;
+  inp.shootPressed = true;
+  sim.setUserInput(inp);
+  sim.step(DT);
+  assert.equal(c.state, 'shoot', 'shoot wind-up still fires after further switches');
+});
+
 test('halftime swaps kickoff and the second half plays out', () => {
   const sim = new MatchSim({ home: TEAMS[1], away: TEAMS[2], difficulty: 'rookie', seed: 12, userTeam: null });
   const kickoff = sim.kickoffTeam;
@@ -244,4 +277,33 @@ test('keeper must release the ball within the hold limit', () => {
   let n = 0;
   while (!released && n++ < 60 * (RULES.keeperHold + 2)) sim.step(DT);
   assert.ok(released, 'keeper distributed the ball');
+});
+
+test('keepers dive vertically inside their box and never leave the pool', () => {
+  const sim = new MatchSim({ home: TEAMS[0], away: TEAMS[1], difficulty: 'pro', seed: 4242, userTeam: null });
+  while (sim.state !== 'live') sim.step(DT);
+  const shooter = sim.outfield(0)[0];
+  const gk = sim.keeperOf(1);
+  // Wound up a shot by hand so the flight is known: hard, high, straight at the ring.
+  sim.giveBall(shooter);
+  shooter.pos.set(6, 0, 0.4);
+  sim.ball.holder = null;
+  shooter.hasBall = false;
+  sim.ball.pos.set(6, 0.9, 0.4);
+  sim.ball.vel.set(20, 3.4, 0);
+  sim.ball.flight = { kind: 'shot', shooter, gb: false, volley: false, quality: 1, dist: 5.6, t: 0, checked: new Set(), name: 'TEST' };
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let maxZ = 0;
+  for (let i = 0; i < 90 && sim.ball.flight?.kind === 'shot'; i++) {
+    sim.step(DT);
+    minY = Math.min(minY, gk.y);
+    maxY = Math.max(maxY, gk.y);
+    maxZ = Math.max(maxZ, Math.abs(gk.pos.z));
+    assert.ok(gk.y >= ARENA.keeperMinY - 1e-6 && gk.y <= ARENA.keeperMaxY + 1e-6, `keeper y ${gk.y} in box`);
+    assert.ok(Math.abs(gk.pos.x) >= ARENA.keeperMinX - 0.05 && Math.abs(gk.pos.x) <= ARENA.keeperMaxX + 0.05, 'keeper x in box');
+    assert.ok(maxZ <= ARENA.keeperMaxZ + 1e-6, `keeper z ${gk.pos.z} in box`);
+    assert.ok(gk.pos.isFinite() && Number.isFinite(gk.y), 'keeper finite');
+  }
+  assert.ok(maxY - minY > 0.05, `keeper dived vertically (range ${(maxY - minY).toFixed(3)})`);
 });

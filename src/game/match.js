@@ -2,7 +2,7 @@ import { Vec3, clamp, lerp } from '../core/vec3.js';
 import { RNG } from '../core/rng.js';
 import { EventBus } from '../core/events.js';
 import { ARENA, RULES, PHYS, MOVE, ACTION, STYLE, DIFFICULTY } from '../data/constants.js';
-import { createPlayer, createBall, emptyInput } from './entities.js';
+import { createPlayer, createBall, emptyInput, copyInput } from './entities.js';
 import { starters } from '../data/teams.js';
 import { updateAI } from './ai.js';
 
@@ -336,6 +336,7 @@ export class MatchSim {
 
   tickCooldowns(p, dt) {
     for (const k in p.cd) if (p.cd[k] > 0) p.cd[k] -= dt;
+    if (p.ai.diving > 0) p.ai.diving = Math.max(0, p.ai.diving - dt); // lunge window (pickup bonus)
     if (p.comboTimer > 0) {
       p.comboTimer -= dt;
       if (p.comboTimer <= 0) p.combo = 0;
@@ -355,7 +356,7 @@ export class MatchSim {
 
     // 1. Inputs
     for (const p of this.players) {
-      if (this.userTeam !== null && p === this.controlled) p.input = this.userInput;
+      if (this.userTeam !== null && p === this.controlled) copyInput(p.input, this.userInput);
       else updateAI(this, p, dt);
     }
     // 2. Actions

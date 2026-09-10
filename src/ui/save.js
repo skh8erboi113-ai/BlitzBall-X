@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = {
   difficulty: 'pro', // rookie | pro | legend
   commentary: true,
   screenShake: true,
+  touchControls: 'auto', // auto | on | off — on-screen stick + buttons
 };
 
 export function defaultState() {
