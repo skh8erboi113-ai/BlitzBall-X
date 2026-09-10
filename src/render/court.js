@@ -1,493 +1,491 @@
 import * as THREE from 'three';
-import { COURT, FENCE } from '../data/constants.js';
-import { toon, makeCanvas, canvasTexture, withOutline, noise2 } from './materials.js';
+import { ARENA } from '../data/constants.js';
+import { toon, toonGradient, makeCanvas, canvasTexture, withOutline, noise2 } from './materials.js';
 
 /**
- * Builds the street court: painted asphalt, chain-link fence, rim, backboard,
- * graffiti wall, floodlights, bleachers + crowd, and skyline.
+ * Builds the Blitzball arena: a giant sphere of water suspended over a street stadium.
+ * Inside: a holographic playing disc with crease arcs, two goal rings with nets, floating
+ * light rigs; outside: stands with a crowd, graffiti banners, floodlights and a skyline.
  */
 export function buildCourt(scene, theme) {
   const group = new THREE.Group();
-  group.name = 'court';
-
-  group.add(buildFloor(theme));
-  group.add(buildFence(theme));
-  group.add(buildHoop());
+  group.name = 'arena';
+  group.add(buildWaterSphere(theme));
+  group.add(buildPlayingDisc(theme));
+  group.add(buildGoal(1, theme));
+  group.add(buildGoal(-1, theme));
+  group.add(buildBubbles(theme));
   group.add(buildSurroundings(theme));
   scene.add(group);
   return group;
 }
 
 const THEMES = {
-  harbor: { asphalt: '#3a4650', line: '#f5f0e6', key: '#12b5b0', sky: ['#0a1d33', '#0d5f78', '#f5a86b'], wall: '#1b2a3a', accent: '#12b5b0', fog: '#0d2a3a' },
-  rooftop: { asphalt: '#3c3838', line: '#f2c230', key: '#1a1a1a', sky: ['#120d2a', '#5c2a6b', '#ff7e5f'], wall: '#2a2426', accent: '#f2c230', fog: '#2a1a2a' },
-  foundry: { asphalt: '#3b3330', line: '#ffd9c2', key: '#ff5a1f', sky: ['#1a0f0a', '#5a2a12', '#ff8c42'], wall: '#2b2320', accent: '#ff5a1f', fog: '#2a1a12' },
-  neon: { asphalt: '#1c1530', line: '#5cf2ff', key: '#c026ff', sky: ['#05030f', '#2a0a55', '#ff2ea6'], wall: '#150d2a', accent: '#c026ff', fog: '#150a2a' },
-  projects: { asphalt: '#3d3d3f', line: '#f5d76e', key: '#e8232a', sky: ['#0d1526', '#3e4f7a', '#f7b267'], wall: '#2c2c30', accent: '#e8232a', fog: '#1a2030' },
-  underpass: { asphalt: '#2c2d31', line: '#c8ff3d', key: '#8a8f99', sky: ['#07080c', '#1c1f2b', '#4a5568'], wall: '#1a1b20', accent: '#c8ff3d', fog: '#101218' },
-  beach: { asphalt: '#4a5a6a', line: '#ffe07a', key: '#ff8a3d', sky: ['#1b2a5a', '#ff7b54', '#ffd56b'], wall: '#2f3a4a', accent: '#ff8a3d', fog: '#3a2a3a' },
-  plaza: { asphalt: '#454a55', line: '#ffd700', key: '#3b5bff', sky: ['#0c1330', '#3149a0', '#ffc38b'], wall: '#2b2f3c', accent: '#3b5bff', fog: '#1a2040' },
+  harbor: { water: '#0f6f8f', deep: '#062a44', line: '#8ff7ff', sky: ['#0a1d33', '#0d5f78', '#f5a86b'], wall: '#1b2a3a', accent: '#12b5b0', fog: '#0a2436' },
+  chapel: { water: '#5b4b1f', deep: '#1c1608', line: '#ffe27a', sky: ['#120d2a', '#5c2a6b', '#ff7e5f'], wall: '#2a2426', accent: '#f2c230', fog: '#231a2a' },
+  foundry: { water: '#7a3b1b', deep: '#2a120a', line: '#ffd9c2', sky: ['#1a0f0a', '#5a2a12', '#ff8c42'], wall: '#2b2320', accent: '#ff6a1f', fog: '#2a1a12' },
+  neon: { water: '#3a1a7a', deep: '#0e0630', line: '#5cf2ff', sky: ['#05030f', '#2a0a55', '#ff2ea6'], wall: '#150d2a', accent: '#c026ff', fog: '#150a2a' },
+  yard: { water: '#6b2230', deep: '#240a10', line: '#ffd23f', sky: ['#0d1526', '#3e4f7a', '#f7b267'], wall: '#2c2c30', accent: '#e11d2e', fog: '#1a2030' },
+  hollow: { water: '#2c3a30', deep: '#0c1410', line: '#7bff6b', sky: ['#07080c', '#1c1f2b', '#4a5568'], wall: '#1a1b20', accent: '#7bff6b', fog: '#101218' },
+  pier: { water: '#1f5f8a', deep: '#0c2740', line: '#ffd56b', sky: ['#1b2a5a', '#ff7b54', '#ffd56b'], wall: '#2f3a4a', accent: '#ff7a59', fog: '#2a2a3a' },
+  uptown: { water: '#1e3a8a', deep: '#0a1440', line: '#f5f0e6', sky: ['#0c1330', '#3149a0', '#ffc38b'], wall: '#2b2f3c', accent: '#2f5bff', fog: '#1a2040' },
 };
 
 export function themeFor(team) {
-  return THEMES[team?.court] || THEMES.projects;
+  return THEMES[team?.arena] || THEMES.harbor;
 }
 
-function buildFloor(theme) {
+// ---------------------------------------------------------------------------
+// Water sphere
+// ---------------------------------------------------------------------------
+
+function buildWaterSphere(theme) {
   const g = new THREE.Group();
-  const w = FENCE.maxX - FENCE.minX;
-  const d = FENCE.maxZ - FENCE.minZ;
-  const px = 96; // pixels per meter
-  const canvas = makeCanvas(Math.round(w * px), Math.round(d * px));
-  const ctx = canvas.getContext('2d');
+  g.name = 'water';
+  const R = ARENA.sphereRadius;
+  // Inner surface: caustic shader, seen from inside.
+  const inner = new THREE.Mesh(
+    new THREE.SphereGeometry(R, 48, 32),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      transparent: true,
+      depthWrite: false,
+      uniforms: {
+        uTime: { value: 0 },
+        uWater: { value: new THREE.Color(theme.water) },
+        uDeep: { value: new THREE.Color(theme.deep) },
+        uLine: { value: new THREE.Color(theme.line) },
+      },
+      vertexShader: `
+        varying vec3 vPos;
+        varying vec3 vNormal;
+        void main() {
+          vPos = position;
+          vNormal = normal;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uWater;
+        uniform vec3 uDeep;
+        uniform vec3 uLine;
+        varying vec3 vPos;
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+        }
+        void main() {
+          vec3 n = normalize(vPos);
+          float up = n.y * 0.5 + 0.5;
+          vec3 base = mix(uDeep, uWater, smoothstep(0.1, 0.9, up));
+          // caustics
+          vec2 uv = vec2(atan(n.z, n.x) * 4.0, n.y * 6.0);
+          float c1 = vnoise(uv * 1.7 + uTime * 0.3);
+          float c2 = vnoise(uv * 3.1 - uTime * 0.22 + 5.0);
+          float caustic = pow(max(0.0, 1.0 - abs(c1 - c2) * 4.0), 4.0);
+          base += uLine * caustic * 0.2 * (0.3 + up * 0.7);
+          // god rays from above
+          float ray = pow(max(0.0, n.y), 6.0) * (0.6 + 0.4 * sin(atan(n.z, n.x) * 14.0 + uTime * 0.6));
+          base += vec3(0.9, 0.95, 1.0) * ray * 0.35;
+          // cel banding
+          float lum = dot(base, vec3(0.299, 0.587, 0.114));
+          float band = floor(lum * 5.0) / 5.0;
+          base *= 0.7 + band * 0.5;
+          gl_FragColor = vec4(base, 0.92);
+        }
+      `,
+    })
+  );
+  inner.name = 'waterInner';
+  inner.renderOrder = -10;
+  g.add(inner);
 
-  // Asphalt base with noise + cracks
-  ctx.fillStyle = theme.asphalt;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = img.data;
-  for (let y = 0; y < canvas.height; y += 1) {
-    for (let x = 0; x < canvas.width; x += 1) {
-      const i = (y * canvas.width + x) * 4;
-      const n = (noise2(x * 0.7, y * 0.7) - 0.5) * 22 + (noise2(x * 0.05, y * 0.05) - 0.5) * 30;
-      data[i] += n;
-      data[i + 1] += n;
-      data[i + 2] += n;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
+  // Outer surface: glossy shell so the sphere reads from outside camera angles.
+  const outer = new THREE.Mesh(
+    new THREE.SphereGeometry(R + 0.4, 48, 32),
+    new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(theme.water),
+      transparent: true,
+      opacity: 0.22,
+      roughness: 0.15,
+      metalness: 0,
+      transmission: 0,
+      side: THREE.FrontSide,
+      depthWrite: false,
+    })
+  );
+  outer.renderOrder = 50;
+  g.add(outer);
 
-  const toPx = (wx, wz) => [(wx - FENCE.minX) * px, (wz - FENCE.minZ) * px];
-
-  // Cracks
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 26; i++) {
-    let x = noise2(i, 1) * canvas.width;
-    let y = noise2(i, 2) * canvas.height;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    for (let s = 0; s < 14; s++) {
-      x += (noise2(i, s * 3) - 0.5) * 60;
-      y += (noise2(i, s * 5) - 0.5) * 60;
-      ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
-
-  // Painted key (worn)
-  ctx.globalAlpha = 0.55;
-  ctx.fillStyle = theme.key;
-  const [kx0, kz0] = toPx(-COURT.keyHalfWidth, COURT.baselineZ);
-  const [kx1, kz1] = toPx(COURT.keyHalfWidth, COURT.keyTopZ);
-  ctx.fillRect(kx0, kz0, kx1 - kx0, kz1 - kz0);
-  ctx.globalAlpha = 1;
-
-  // Lines
-  ctx.strokeStyle = theme.line;
-  ctx.lineWidth = px * 0.06;
-  ctx.lineCap = 'round';
-  // Sidelines & baseline & halfcourt
-  const [sx0, sz0] = toPx(-COURT.halfWidth, COURT.baselineZ);
-  const [sx1, sz1] = toPx(COURT.halfWidth, COURT.halfcourtZ);
-  ctx.strokeRect(sx0, sz0, sx1 - sx0, sz1 - sz0);
-  // Key
-  ctx.strokeRect(kx0, kz0, kx1 - kx0, kz1 - kz0);
-  // Free-throw circle
-  const [fcx, fcz] = toPx(0, COURT.keyTopZ);
-  ctx.beginPath();
-  ctx.arc(fcx, fcz, 1.8 * px, 0, Math.PI * 2);
-  ctx.stroke();
-  // Arc
-  const [rx, rz] = toPx(COURT.rimX, COURT.rimZ);
-  ctx.beginPath();
-  ctx.arc(rx, rz, COURT.arcRadius * px, 0.1, Math.PI - 0.1);
-  ctx.stroke();
-  // Straight arc extensions down to the baseline
-  const cornerX = Math.sqrt(Math.max(0, COURT.arcRadius ** 2 - (Math.cos(0.1) * COURT.arcRadius) ** 2));
-  // Restricted area
-  ctx.beginPath();
-  ctx.arc(rx, rz, 1.25 * px, 0, Math.PI);
-  ctx.stroke();
-  // Center logo — big "X"
-  ctx.save();
-  const [cx, cz] = toPx(0, 2.2);
-  ctx.translate(cx, cz);
-  ctx.globalAlpha = 0.5;
-  ctx.fillStyle = theme.line;
-  ctx.font = `900 ${px * 3.2}px "Barlow Condensed", Impact, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('X', 0, 0);
-  ctx.globalAlpha = 0.35;
-  ctx.font = `700 ${px * 0.6}px "Barlow Condensed", Impact, sans-serif`;
-  ctx.fillText('BLITZBALL', 0, -px * 1.9);
-  ctx.restore();
-
-  // Wear: scuff the paint
-  ctx.globalCompositeOperation = 'destination-out';
-  for (let i = 0; i < 1600; i++) {
-    const x = noise2(i, 7) * canvas.width;
-    const y = noise2(i, 9) * canvas.height;
-    ctx.globalAlpha = noise2(i, 11) * 0.4;
-    ctx.beginPath();
-    ctx.arc(x, y, 1 + noise2(i, 13) * 6, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.globalAlpha = 1;
-  // Re-fill the transparent scuffs with darker asphalt so the wear reads as paint loss
-  ctx.globalCompositeOperation = 'destination-over';
-  ctx.fillStyle = '#26292e';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.globalCompositeOperation = 'source-over';
-
-  const tex = canvasTexture(canvas, { anisotropy: 8 });
-  const mat = new THREE.MeshToonMaterial({ map: tex, gradientMap: toonGradientOf() });
-  const geo = new THREE.PlaneGeometry(w, d);
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set((FENCE.minX + FENCE.maxX) / 2, 0, (FENCE.minZ + FENCE.maxZ) / 2);
-  mesh.receiveShadow = true;
-  g.add(mesh);
-
-  // Sidewalk apron around the fence
-  const apron = new THREE.Mesh(new THREE.PlaneGeometry(w + 30, d + 30), toon('#5a5a5e'));
-  apron.rotation.x = -Math.PI / 2;
-  apron.position.set(0, -0.01, 0);
-  apron.receiveShadow = true;
-  g.add(apron);
-  return g;
-}
-
-function toonGradientOf() {
-  return toon('#ffffff').gradientMap;
-}
-
-function buildFence(theme) {
-  const g = new THREE.Group();
-  const h = 4.2;
-  // Chain-link texture
-  const c = makeCanvas(128, 128);
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, 128, 128);
-  ctx.strokeStyle = 'rgba(200,205,215,0.9)';
-  ctx.lineWidth = 3;
-  for (let i = -128; i < 256; i += 32) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i + 128, 128);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(i + 128, 0);
-    ctx.lineTo(i, 128);
-    ctx.stroke();
-  }
-  const tex = canvasTexture(c, { repeat: [1, 1] });
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false, opacity: 0.85 });
-
-  const nearGroup = new THREE.Group();
-  nearGroup.name = 'fenceNear';
-  const sides = [
-    { from: [FENCE.minX, FENCE.minZ], to: [FENCE.maxX, FENCE.minZ] },
-    { from: [FENCE.maxX, FENCE.minZ], to: [FENCE.maxX, FENCE.maxZ] },
-    { from: [FENCE.maxX, FENCE.maxZ], to: [FENCE.minX, FENCE.maxZ] },
-    { from: [FENCE.minX, FENCE.maxZ], to: [FENCE.minX, FENCE.minZ] },
-  ];
-  const postMat = toon('#6b7280');
-  const railGeo = new THREE.CylinderGeometry(0.035, 0.035, 1, 8);
-  sides.forEach((s, si) => {
-    // The camera-side (near) fence lives in its own group so the renderer can hide it
-    // whenever the camera is outside the cage - otherwise it sits between us and the game.
-    const target = si === 2 ? nearGroup : g;
-    const dx = s.to[0] - s.from[0];
-    const dz = s.to[1] - s.from[1];
-    const len = Math.sqrt(dx * dx + dz * dz);
-    const m = mat.clone();
-    m.map = tex.clone();
-    m.map.repeat.set(len / 0.9, h / 0.9);
-    m.map.needsUpdate = true;
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(len, h), m);
-    plane.position.set((s.from[0] + s.to[0]) / 2, h / 2, (s.from[1] + s.to[1]) / 2);
-    plane.rotation.y = Math.atan2(dx, dz) + Math.PI / 2;
-    target.add(plane);
-    // posts
-    const n = Math.max(2, Math.round(len / 3));
-    for (let i = 0; i <= n; i++) {
-      const t = i / n;
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, h, 8), postMat);
-      post.position.set(s.from[0] + dx * t, h / 2, s.from[1] + dz * t);
-      post.castShadow = true;
-      // Corner posts always stay with the main group so the cage silhouette reads.
-      (i === 0 || i === n ? g : target).add(post);
-    }
-    // top rail
-    const rail = new THREE.Mesh(railGeo, postMat);
-    rail.scale.y = len;
-    rail.position.set((s.from[0] + s.to[0]) / 2, h, (s.from[1] + s.to[1]) / 2);
-    rail.rotation.z = Math.PI / 2;
-    rail.rotation.y = -Math.atan2(dz, dx);
-    target.add(rail);
-  });
-  g.add(nearGroup);
-  return g;
-}
-
-function buildHoop() {
-  const g = new THREE.Group();
-  const steel = toon('#c9ced6');
-  const dark = toon('#2b2f36');
-  const orange = toon('#ff6a1f');
-
-  // Pole (behind the baseline, offset)
-  const poleH = COURT.rimHeight + 0.9;
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, poleH, 12), dark);
-  pole.position.set(COURT.rimX, poleH / 2, COURT.backboardZ - 1.2);
-  pole.castShadow = true;
-  g.add(withOutline(pole, 0.03));
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.2), dark);
-  arm.position.set(COURT.rimX, COURT.rimHeight + 0.6, COURT.backboardZ - 0.6);
-  g.add(arm);
-  const brace = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.35), dark);
-  brace.position.set(COURT.rimX, COURT.rimHeight + 0.15, COURT.backboardZ - 0.6);
-  brace.rotation.x = -0.6;
-  g.add(brace);
-
-  // Backboard (clear acrylic with white border + square)
-  const bbGeo = new THREE.BoxGeometry(COURT.backboardWidth, COURT.backboardHeight, 0.05);
-  const bbMat = new THREE.MeshPhysicalMaterial({ color: 0xdfe9f5, transparent: true, opacity: 0.38, roughness: 0.15, metalness: 0, transmission: 0 });
-  const bb = new THREE.Mesh(bbGeo, bbMat);
-  bb.position.set(COURT.rimX, COURT.backboardBottom + COURT.backboardHeight / 2, COURT.backboardZ - 0.03);
-  g.add(bb);
-  const bc = makeCanvas(360, 210);
-  const bctx = bc.getContext('2d');
-  bctx.clearRect(0, 0, 360, 210);
-  bctx.strokeStyle = '#ffffff';
-  bctx.lineWidth = 10;
-  bctx.strokeRect(5, 5, 350, 200);
-  bctx.lineWidth = 7;
-  bctx.strokeRect(120, 95, 120, 90);
-  const bTex = canvasTexture(bc);
-  const bLines = new THREE.Mesh(new THREE.PlaneGeometry(COURT.backboardWidth, COURT.backboardHeight), new THREE.MeshBasicMaterial({ map: bTex, transparent: true }));
-  bLines.position.set(COURT.rimX, COURT.backboardBottom + COURT.backboardHeight / 2, COURT.backboardZ + 0.001);
-  g.add(bLines);
-
-  // Rim
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(COURT.rimRadius, 0.018, 10, 32), orange);
+  // Rim ring "surface" at the equator to sell the sphere silhouette.
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.4, 0.12, 8, 96), new THREE.MeshBasicMaterial({ color: theme.line, transparent: true, opacity: 0.35 }));
   rim.rotation.x = Math.PI / 2;
-  rim.position.set(COURT.rimX, COURT.rimHeight, COURT.rimZ);
+  rim.position.y = 0.2;
   g.add(rim);
-  const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, COURT.rimZ - COURT.backboardZ), orange);
-  bracket.position.set(COURT.rimX, COURT.rimHeight - 0.03, (COURT.rimZ + COURT.backboardZ) / 2);
-  g.add(bracket);
 
-  // Net (procedural lines)
-  const netGroup = new THREE.Group();
-  const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
-  const rings = 6;
-  const segs = 12;
-  const pts = [];
-  for (let r = 0; r <= rings; r++) {
-    const t = r / rings;
-    const rad = COURT.rimRadius * (1 - t * 0.5);
-    const y = COURT.rimHeight - t * 0.42;
-    for (let s = 0; s < segs; s++) {
-      const a0 = (s / segs) * Math.PI * 2 + (r % 2) * (Math.PI / segs);
-      const a1 = ((s + 1) / segs) * Math.PI * 2 + (r % 2) * (Math.PI / segs);
-      pts.push(new THREE.Vector3(Math.cos(a0) * rad, y, Math.sin(a0) * rad), new THREE.Vector3(Math.cos(a1) * rad, y, Math.sin(a1) * rad));
-      if (r < rings) {
-        const rad2 = COURT.rimRadius * (1 - ((r + 1) / rings) * 0.5);
-        const y2 = COURT.rimHeight - ((r + 1) / rings) * 0.42;
-        const b0 = a0 + Math.PI / segs;
-        pts.push(new THREE.Vector3(Math.cos(a0) * rad, y, Math.sin(a0) * rad), new THREE.Vector3(Math.cos(b0) * rad2, y2, Math.sin(b0) * rad2));
-        pts.push(new THREE.Vector3(Math.cos(a1) * rad, y, Math.sin(a1) * rad), new THREE.Vector3(Math.cos(b0) * rad2, y2, Math.sin(b0) * rad2));
-      }
-    }
-  }
-  const netGeo = new THREE.BufferGeometry().setFromPoints(pts);
-  const net = new THREE.LineSegments(netGeo, netMat);
-  net.position.set(COURT.rimX, 0, COURT.rimZ);
-  netGroup.add(net);
-  netGroup.name = 'net';
-  g.add(netGroup);
-  g.userData.net = netGroup;
+  g.userData.update = (t) => {
+    inner.material.uniforms.uTime.value = t;
+  };
   return g;
 }
 
-function buildSurroundings(theme) {
-  const g = new THREE.Group();
+// ---------------------------------------------------------------------------
+// Playing disc (holographic markings)
+// ---------------------------------------------------------------------------
 
-  // Graffiti wall behind the hoop
-  const wallW = FENCE.maxX - FENCE.minX + 14;
-  const wallH = 7.5;
-  const c = makeCanvas(1024, 384);
+function buildPlayingDisc(theme) {
+  const g = new THREE.Group();
+  g.name = 'disc';
+  const R = ARENA.fieldRadius + 0.6;
+  const px = 40;
+  const c = makeCanvas(Math.round(R * 2 * px), Math.round(R * 2 * px));
   const ctx = c.getContext('2d');
-  ctx.fillStyle = theme.wall;
-  ctx.fillRect(0, 0, c.width, c.height);
-  // bricks
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  const cx = c.width / 2;
+  const cz = c.height / 2;
+  const toPx = (x, z) => [cx + x * px, cz + z * px];
+  ctx.clearRect(0, 0, c.width, c.height);
+  // translucent disc
+  const grad = ctx.createRadialGradient(cx, cz, 0, cx, cz, R * px);
+  grad.addColorStop(0, 'rgba(255,255,255,0.05)');
+  grad.addColorStop(0.85, 'rgba(255,255,255,0.03)');
+  grad.addColorStop(1, 'rgba(255,255,255,0.0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cz, R * px, 0, Math.PI * 2);
+  ctx.fill();
+  // hex grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.09)';
   ctx.lineWidth = 2;
-  for (let y = 0; y < c.height; y += 24) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(c.width, y);
-    ctx.stroke();
-    const off = (y / 24) % 2 ? 24 : 0;
-    for (let x = off; x < c.width; x += 48) {
+  const hs = 38;
+  for (let y = -R * px; y < R * px; y += hs * 1.5) {
+    for (let x = -R * px; x < R * px; x += hs * Math.sqrt(3)) {
+      const ox = ((y / (hs * 1.5)) | 0) % 2 ? (hs * Math.sqrt(3)) / 2 : 0;
+      const hx = cx + x + ox;
+      const hy = cz + y;
+      if (Math.hypot(hx - cx, hy - cz) > R * px - 20) continue;
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x, y + 24);
+      for (let k = 0; k < 6; k++) {
+        const a = (Math.PI / 3) * k + Math.PI / 6;
+        const X = hx + Math.cos(a) * hs * 0.9;
+        const Y = hy + Math.sin(a) * hs * 0.9;
+        if (k === 0) ctx.moveTo(X, Y);
+        else ctx.lineTo(X, Y);
+      }
+      ctx.closePath();
       ctx.stroke();
     }
   }
-  // graffiti pieces
-  const tags = ['BLITZBALL', 'X', 'NO LOVE', 'KINGS OF THE YARD', 'RUN IT BACK', 'GAMEBREAKER', '21'];
-  const palette = [theme.accent, '#ff2ea6', '#5cf2ff', '#ffd23f', '#7bff6b', '#ff6a1f', '#ffffff'];
-  for (let i = 0; i < 9; i++) {
-    ctx.save();
-    const x = 60 + noise2(i, 21) * (c.width - 120);
-    const y = 60 + noise2(i, 22) * (c.height - 120);
-    ctx.translate(x, y);
-    ctx.rotate((noise2(i, 23) - 0.5) * 0.5);
-    const size = 46 + noise2(i, 24) * 70;
-    ctx.font = `900 ${size}px "Bangers", "Permanent Marker", Impact, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.lineWidth = size * 0.12;
-    ctx.strokeStyle = '#0b0b12';
-    ctx.lineJoin = 'round';
-    const text = tags[i % tags.length];
-    ctx.strokeText(text, 0, 0);
-    ctx.fillStyle = palette[i % palette.length];
-    ctx.fillText(text, 0, 0);
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(text, -size * 0.04, -size * 0.04);
-    ctx.restore();
+  // outer boundary
+  ctx.strokeStyle = theme.line;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(cx, cz, ARENA.fieldRadius * px, 0, Math.PI * 2);
+  ctx.stroke();
+  // centre circle + line
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(cx, cz, ARENA.centerCircle * px, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cz - ARENA.fieldRadius * px);
+  ctx.lineTo(cx, cz + ARENA.fieldRadius * px);
+  ctx.stroke();
+  // crease arcs
+  for (const s of [1, -1]) {
+    const [gx, gz] = toPx(ARENA.goalX * s, 0);
+    ctx.beginPath();
+    ctx.arc(gx, gz, ARENA.creaseRadius * px, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = hexToRgba(theme.accent, 0.12);
+    ctx.fill();
+    // keeper box
+    const [bx0, bz0] = toPx(ARENA.keeperMinX * s, -ARENA.keeperMaxZ);
+    const [bx1, bz1] = toPx(ARENA.keeperMaxX * s, ARENA.keeperMaxZ);
+    ctx.strokeRect(Math.min(bx0, bx1), Math.min(bz0, bz1), Math.abs(bx1 - bx0), Math.abs(bz1 - bz0));
   }
-  // drips / grime
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  for (let i = 0; i < 40; i++) ctx.fillRect(noise2(i, 31) * c.width, c.height - 60 - noise2(i, 32) * 40, 4, 80);
+  // centre logo
+  ctx.save();
+  ctx.translate(cx, cz);
+  ctx.font = `900 ${Math.round(px * 1.6)}px "Bangers", Impact, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.strokeText('BLITZBALL X', 0, 0);
+  ctx.fillStyle = hexToRgba(theme.line, 0.8);
+  ctx.fillText('BLITZBALL X', 0, 0);
+  ctx.restore();
   const tex = canvasTexture(c);
-  const wall = new THREE.Mesh(new THREE.PlaneGeometry(wallW, wallH), new THREE.MeshToonMaterial({ map: tex, gradientMap: toonGradientOf() }));
-  wall.position.set(0, wallH / 2, FENCE.minZ - 5.5);
-  wall.receiveShadow = true;
-  g.add(wall);
-  const wallTop = new THREE.Mesh(new THREE.BoxGeometry(wallW, 0.4, 0.8), toon('#3a3a42'));
-  wallTop.position.set(0, wallH + 0.2, FENCE.minZ - 5.5);
-  g.add(wallTop);
+  const disc = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, R * 2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = -0.02;
+  disc.renderOrder = -5;
+  disc.receiveShadow = false;
+  g.add(disc);
+  // Shadow catcher (invisible but receives blob-less contact shadows from the directional light)
+  const catcher = new THREE.Mesh(new THREE.CircleGeometry(R, 48), new THREE.ShadowMaterial({ opacity: 0.25 }));
+  catcher.rotation.x = -Math.PI / 2;
+  catcher.position.y = -0.03;
+  catcher.receiveShadow = true;
+  g.add(catcher);
+  // Floating marker pylons around the boundary
+  const pylonMat = new THREE.MeshBasicMaterial({ color: theme.line, transparent: true, opacity: 0.7 });
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.4, 6), pylonMat);
+    p.position.set(Math.cos(a) * (ARENA.fieldRadius + 0.3), 0.6, Math.sin(a) * (ARENA.fieldRadius + 0.3));
+    g.add(p);
+  }
+  return g;
+}
 
-  // Bleachers along the sides with crowd
+// ---------------------------------------------------------------------------
+// Goals
+// ---------------------------------------------------------------------------
+
+function buildGoal(sign, theme) {
+  const g = new THREE.Group();
+  g.name = sign > 0 ? 'goalPos' : 'goalNeg';
+  const x = ARENA.goalX * sign;
+  const ringMat = toon('#ffd23f');
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(ARENA.goalRadius, ARENA.postRadius, 12, 48), ringMat);
+  ring.rotation.y = Math.PI / 2;
+  ring.position.set(x, ARENA.goalY, 0);
+  ring.castShadow = true;
+  g.add(withOutline(ring, 0.03));
+  // inner glow ring
+  const glow = new THREE.Mesh(new THREE.TorusGeometry(ARENA.goalRadius - 0.1, 0.05, 8, 48), new THREE.MeshBasicMaterial({ color: theme.accent }));
+  glow.rotation.y = Math.PI / 2;
+  glow.position.set(x, ARENA.goalY, 0);
+  g.add(glow);
+  g.userData.glow = glow;
+  // Net: a cone of lines behind the ring
+  const netMat = new THREE.LineBasicMaterial({ color: 0xf5f0e6, transparent: true, opacity: 0.55 });
+  const netPts = [];
+  const depth = 1.7;
+  const segs = 20;
+  for (let i = 0; i < segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    const r = ARENA.goalRadius;
+    netPts.push(new THREE.Vector3(x, ARENA.goalY + Math.cos(a) * r, Math.sin(a) * r));
+    netPts.push(new THREE.Vector3(x + sign * depth, ARENA.goalY + Math.cos(a) * r * 0.25, Math.sin(a) * r * 0.25));
+  }
+  for (let ringI = 1; ringI <= 3; ringI++) {
+    const t = ringI / 4;
+    const r = ARENA.goalRadius * (1 - t * 0.75);
+    for (let i = 0; i < segs; i++) {
+      const a0 = (i / segs) * Math.PI * 2;
+      const a1 = ((i + 1) / segs) * Math.PI * 2;
+      netPts.push(new THREE.Vector3(x + sign * depth * t, ARENA.goalY + Math.cos(a0) * r, Math.sin(a0) * r));
+      netPts.push(new THREE.Vector3(x + sign * depth * t, ARENA.goalY + Math.cos(a1) * r, Math.sin(a1) * r));
+    }
+  }
+  const net = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(netPts), netMat);
+  g.add(net);
+  // Mounting arms to the sphere wall
+  const armMat = toon('#3a3a42');
+  for (const dz of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.2, 8), armMat);
+    arm.position.set(x + sign * 1.4, ARENA.goalY + 0.2, dz * 1.2);
+    arm.rotation.z = Math.PI / 2;
+    arm.rotation.y = dz * 0.35;
+    g.add(arm);
+  }
+  // Goal-line light bar
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, ARENA.goalRadius * 2 + 1.2), new THREE.MeshBasicMaterial({ color: theme.accent }));
+  bar.position.set(x, ARENA.goalY - ARENA.goalRadius - 0.35, 0);
+  g.add(bar);
+  // Team-ish banner behind goal (on the sphere wall)
+  const c = makeCanvas(512, 192);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0)';
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.font = '900 120px "Bangers", Impact, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = '#0b0b12';
+  ctx.lineJoin = 'round';
+  ctx.strokeText('GOAL', 256, 96);
+  ctx.fillStyle = theme.line;
+  ctx.fillText('GOAL', 256, 96);
+  const banner = new THREE.Mesh(new THREE.PlaneGeometry(5, 1.9), new THREE.MeshBasicMaterial({ map: canvasTexture(c), transparent: true, depthWrite: false }));
+  banner.position.set(x + sign * 6, ARENA.goalY + 4.2, 0);
+  banner.rotation.y = sign > 0 ? -Math.PI / 2 : Math.PI / 2;
+  g.add(banner);
+  return g;
+}
+
+// ---------------------------------------------------------------------------
+// Ambient bubbles / particles inside the sphere
+// ---------------------------------------------------------------------------
+
+function buildBubbles(theme) {
+  const count = 320;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count * 3);
+  const speeds = new Float32Array(count);
+  const R = ARENA.sphereRadius - 1;
+  for (let i = 0; i < count; i++) {
+    const r = Math.cbrt(noise2(i, 1)) * R;
+    const th = noise2(i, 2) * Math.PI * 2;
+    const ph = Math.acos(2 * noise2(i, 3) - 1);
+    pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
+    pos[i * 3 + 1] = r * Math.cos(ph);
+    pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+    speeds[i] = 0.3 + noise2(i, 4) * 0.9;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.09, transparent: true, opacity: 0.5, depthWrite: false, sizeAttenuation: true });
+  const pts = new THREE.Points(geo, mat);
+  pts.name = 'bubbles';
+  pts.userData.update = (dt) => {
+    const a = geo.attributes.position;
+    for (let i = 0; i < count; i++) {
+      let y = a.getY(i) + speeds[i] * dt;
+      const x = a.getX(i);
+      const z = a.getZ(i);
+      const maxY = Math.sqrt(Math.max(0, R * R - x * x - z * z));
+      if (y > maxY) y = -maxY * 0.9;
+      a.setY(i, y);
+      a.setX(i, x + Math.sin(y * 1.3 + i) * dt * 0.15);
+    }
+    a.needsUpdate = true;
+  };
+  return pts;
+}
+
+// ---------------------------------------------------------------------------
+// Stadium around the sphere
+// ---------------------------------------------------------------------------
+
+function buildSurroundings(theme) {
+  const g = new THREE.Group();
+  g.name = 'stadium';
+  const R = ARENA.sphereRadius;
+  const groundY = -R - 3;
+
+  // Ground: wide dark plaza
+  const plaza = new THREE.Mesh(new THREE.CircleGeometry(140, 64), toon('#1d2028'));
+  plaza.rotation.x = -Math.PI / 2;
+  plaza.position.y = groundY;
+  g.add(plaza);
+
+  // Support cradle (tripod arms holding the sphere)
+  const armMat = toon('#2f333d');
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.4;
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.2, R + 6, 10), armMat);
+    arm.position.set(Math.cos(a) * (R * 0.55), groundY + (R + 6) / 2 - 1, Math.sin(a) * (R * 0.55));
+    arm.lookAt(0, -R * 0.55, 0);
+    arm.rotateX(Math.PI / 2);
+    g.add(arm);
+  }
+
+  // Stands: ring of tiered seats around the equator, outside the sphere
   const crowd = new THREE.Group();
   crowd.name = 'crowd';
-  const rows = 4;
   const crowdColors = ['#ff2ea6', '#5cf2ff', '#ffd23f', '#f5f0e6', '#7bff6b', '#ff6a1f', theme.accent, '#c026ff', '#2c2c30', '#8a8f99'];
   const skin = ['#f1c27d', '#c68642', '#8d5524', '#5c3a21'];
-  const bodyGeo = new THREE.CapsuleGeometry(0.22, 0.5, 3, 6);
-  const headGeo = new THREE.SphereGeometry(0.16, 7, 6);
-  const sideZs = [];
-  for (let side = -1; side <= 1; side += 2) {
-    for (let r = 0; r < rows; r++) {
-      const x = side * (FENCE.maxX + 1.6 + r * 1.1);
-      const y = 0.35 + r * 0.55;
-      const step = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5 + r * 0.55, FENCE.maxZ - FENCE.minZ), toon('#4b5563'));
-      step.position.set(x, (0.5 + r * 0.55) / 2, (FENCE.minZ + FENCE.maxZ) / 2);
-      step.receiveShadow = true;
-      g.add(step);
-      for (let z = FENCE.minZ + 0.6; z < FENCE.maxZ - 0.4; z += 0.85) {
-        if (noise2(z * 3.1, r + side * 10) < 0.18) continue;
-        const person = new THREE.Group();
-        const bm = toon(crowdColors[Math.floor(noise2(z, r * 7 + side) * crowdColors.length)]);
-        const body = new THREE.Mesh(bodyGeo, bm);
-        body.position.y = 0.45;
-        const head = new THREE.Mesh(headGeo, toon(skin[Math.floor(noise2(z * 2, r + side) * skin.length)]));
-        head.position.y = 0.98;
-        person.add(body, head);
-        person.position.set(x + (noise2(z, r) - 0.5) * 0.3, y + 0.1, z);
-        person.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
-        person.userData.baseY = person.position.y;
-        person.userData.phase = noise2(z, r * 3) * Math.PI * 2;
-        crowd.add(person);
-      }
+  const bodyGeo = new THREE.CapsuleGeometry(0.28, 0.6, 3, 6);
+  const headGeo = new THREE.SphereGeometry(0.2, 7, 6);
+  const tiers = 5;
+  for (let t = 0; t < tiers; t++) {
+    const rr = R + 4 + t * 1.6;
+    const y = -3.5 + t * 1.1;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(rr, 0.75, 6, 96), toon(t % 2 ? '#3d4553' : '#4b5563'));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = y;
+    g.add(ring);
+    const n = Math.floor(rr * 2.2);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      if (noise2(i * 1.7, t) < 0.22) continue;
+      const person = new THREE.Group();
+      const bm = toon(crowdColors[Math.floor(noise2(i, t * 7) * crowdColors.length)]);
+      const body = new THREE.Mesh(bodyGeo, bm);
+      body.position.y = 0.55;
+      const head = new THREE.Mesh(headGeo, toon(skin[Math.floor(noise2(i * 2, t) * skin.length)]));
+      head.position.y = 1.2;
+      person.add(body, head);
+      person.position.set(Math.cos(a) * rr, y + 0.6, Math.sin(a) * rr);
+      person.lookAt(0, y, 0);
+      person.userData.baseY = person.position.y;
+      person.userData.phase = noise2(i, t * 3) * Math.PI * 2;
+      crowd.add(person);
     }
   }
   g.add(crowd);
   g.userData.crowd = crowd;
 
-  // Floodlights
+  // Graffiti banners hung on the top tier (facing inward)
+  const tags = ['BLITZBALL X', 'NO LOVE IN THE POOL', 'RUN IT BACK', 'GAMEBREAKER', 'GET WASHED', 'DEEP END', 'X'];
+  const palette = [theme.accent, '#ff2ea6', '#5cf2ff', '#ffd23f', '#7bff6b', '#ff6a1f', '#ffffff'];
+  for (let i = 0; i < 7; i++) {
+    const c = makeCanvas(768, 192);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = theme.wall;
+    ctx.fillRect(0, 0, c.width, c.height);
+    for (let k = 0; k < 6; k++) {
+      ctx.fillStyle = hexToRgba(palette[(i + k) % palette.length], 0.18);
+      ctx.fillRect(noise2(i, k) * 700, 0, 40 + noise2(k, i) * 80, 192);
+    }
+    ctx.font = '900 118px "Bangers", "Permanent Marker", Impact, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 16;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0b0b12';
+    ctx.strokeText(tags[i], 384, 100);
+    ctx.fillStyle = palette[i % palette.length];
+    ctx.fillText(tags[i], 384, 100);
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.3), new THREE.MeshToonMaterial({ map: canvasTexture(c), gradientMap: toonGradient() }));
+    const a = (i / 7) * Math.PI * 2 + 0.2;
+    const rr = R + 4 + tiers * 1.6 + 0.6;
+    banner.position.set(Math.cos(a) * rr, 3.5, Math.sin(a) * rr);
+    banner.lookAt(0, 3.5, 0);
+    g.add(banner);
+  }
+
+  // Floodlight masts
   const lightMat = toon('#3a3a42');
   const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff1c9 });
-  const corners = [
-    [FENCE.minX - 0.8, FENCE.minZ - 0.8],
-    [FENCE.maxX + 0.8, FENCE.minZ - 0.8],
-    [FENCE.minX - 0.8, FENCE.maxZ + 0.8],
-    [FENCE.maxX + 0.8, FENCE.maxZ + 0.8],
-  ];
-  for (const [x, z] of corners) {
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 9, 8), lightMat);
-    pole.position.set(x, 4.5, z);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const rr = R + 16;
+    const x = Math.cos(a) * rr;
+    const z = Math.sin(a) * rr;
+    const h = R + 22;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, h, 8), lightMat);
+    pole.position.set(x, groundY + h / 2, z);
     g.add(pole);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.35), lightMat);
-    head.position.set(x, 9, z);
-    head.lookAt(0, 3, 0);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(3, 1.4, 0.8), lightMat);
+    head.position.set(x, groundY + h + 0.6, z);
+    head.lookAt(0, 6, 0);
     g.add(head);
-    const bulb = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.3), bulbMat);
+    const bulb = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.0), bulbMat);
     bulb.position.copy(head.position);
-    bulb.lookAt(0, 3, 0);
-    bulb.translateZ(0.19);
+    bulb.lookAt(0, 6, 0);
+    bulb.translateZ(0.42);
     g.add(bulb);
   }
 
-  // Skyline silhouettes
+  // Skyline ring
   const skyline = new THREE.Group();
   const bMat = toon('#0f1118');
   const winMat = new THREE.MeshBasicMaterial({ color: 0xffd98a });
-  let bx = -60;
-  let i = 0;
-  while (bx < 60) {
-    const w = 4 + noise2(i, 41) * 8;
-    const h = 8 + noise2(i, 42) * 26;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 6), bMat);
-    b.position.set(bx + w / 2, h / 2, FENCE.minZ - 24 - noise2(i, 43) * 20);
+  for (let i = 0; i < 40; i++) {
+    const a = (i / 40) * Math.PI * 2;
+    const dist = 95 + noise2(i, 43) * 30;
+    const w = 6 + noise2(i, 41) * 10;
+    const h = 14 + noise2(i, 42) * 46;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), bMat);
+    b.position.set(Math.cos(a) * dist, groundY + h / 2, Math.sin(a) * dist);
+    b.rotation.y = -a;
     skyline.add(b);
-    // windows
-    for (let k = 0; k < 6; k++) {
+    for (let k = 0; k < 8; k++) {
       if (noise2(i, k * 5) < 0.4) continue;
-      const win = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.7), winMat);
-      win.position.set(b.position.x + (noise2(i, k) - 0.5) * (w - 1), 2 + noise2(k, i) * (h - 3), b.position.z + 3.01);
-      skyline.add(win);
-    }
-    bx += w + 1.5 + noise2(i, 44) * 3;
-    i++;
-  }
-  // side buildings
-  for (let side = -1; side <= 1; side += 2) {
-    for (let k = 0; k < 6; k++) {
-      const w = 6 + noise2(k, 51 + side) * 6;
-      const h = 10 + noise2(k, 52 + side) * 18;
-      const b = new THREE.Mesh(new THREE.BoxGeometry(6, h, w), bMat);
-      b.position.set(side * (28 + noise2(k, 53) * 12), h / 2, -20 + k * 9);
-      skyline.add(b);
-    }
-  }
-  g.add(skyline);
-
-  // Street props: dumpster, cones, hydrant
-  const dumpster = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.3, 1.2), toon('#2f6f3e'));
-  dumpster.position.set(FENCE.minX - 3, 0.65, FENCE.maxZ + 3);
-  dumpster.castShadow = true;
-  g.add(withOutline(dumpster, 0.03));
-  const hydrant = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.8, 8), toon('#e8232a'));
-  hydrant.position.set(FENCE.maxX + 2.5, 0.4, FENCE.maxZ + 2.5);
-  g.add(withOutline(hydrant, 0.02));
-  const bench = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.12, 0.5), toon('#7a5230'));
-  bench.position.set(0, 0.5, FENCE.maxZ + 1.0);
-  g.add(bench);
-  for (const dx of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.5), toon('#2b2f36'));
-    leg.position.set(dx * 1.0, 0.25, FENCE.maxZ + 1.0);
-    g.add(leg);
-  }
-
-  return g;
-}
+      const win = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.2), winMat);
+      win.position.set(Math.co
