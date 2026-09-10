@@ -488,4 +488,18 @@ function buildSurroundings(theme) {
     for (let k = 0; k < 8; k++) {
       if (noise2(i, k * 5) < 0.4) continue;
       const win = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.2), winMat);
-      win.position.set(Math.co
+      win.position.set(Math.cos(a) * (dist - w / 2 - 0.05), groundY + 3 + noise2(k, i) * (h - 4), Math.sin(a) * (dist - w / 2 - 0.05));
+      win.position.x += Math.sin(a) * (noise2(i, k) - 0.5) * (w - 1.5);
+      win.position.z -= Math.cos(a) * (noise2(i, k) - 0.5) * (w - 1.5);
+      win.lookAt(0, win.position.y, 0);
+      skyline.add(win);
+    }
+  }
+  g.add(skyline);
+  return g;
+}
+
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
