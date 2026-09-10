@@ -12,15 +12,15 @@ for (let i = 0; i < n; i++) {
   const away = TEAMS[(i * 3 + 1) % TEAMS.length];
   const sim = new MatchSim({ home, away, difficulty: diff, seed: 1000 + i, userTeam: null });
   sim.events.on('*', (type) => { counts[type] = (counts[type] || 0) + 1; });
-  if (verbose && i === 0) sim.events.on('*', (t, e) => { if (['score','steal','block','ankle','dunk','turnover','gamebreaker','alleyoop'].includes(t)) console.log(sim.time.toFixed(1), t, e.player?.data?.name || e.stealer?.data?.name || e.blocker?.data?.name || e.breaker?.data?.name || e.passer?.data?.name || e.team, e.points ?? e.reason ?? ''); });
+  if (verbose && i === 0) sim.events.on('*', (t, e) => { if (['score','tackle','block','washed','bighit','save','turnover','gamebreaker','alleyoop','volleyshot','halftime','overtime'].includes(t)) console.log(sim.time.toFixed(1), t, e.player?.data?.name || e.keeper?.data?.name || e.blocker?.data?.name || e.passer?.data?.name || e.team, e.points ?? e.reason ?? e.type ?? ''); });
   const dt = 1 / 60;
   let steps = 0;
   const maxSteps = 60 * 60 * 30;
   while (sim.state !== 'over' && steps < maxSteps) { sim.step(dt); steps++; }
   totalTime += sim.time;
-  results.push({ home: home.abbr, away: away.abbr, score: sim.score, t: sim.time, over: sim.state === 'over', poss: sim.stats.possessions, shots: sim.stats.shots, dunks: sim.stats.dunks, tricks: sim.stats.tricks });
+  results.push({ home: home.abbr, away: away.abbr, score: sim.score, t: sim.time, over: sim.state === 'over', ot: sim.overtime, shots: sim.stats.shots, saves: sim.stats.saves, tricks: sim.stats.tricks, hits: sim.stats.hits, tackles: sim.stats.tackles, volleys: sim.stats.volleys });
 }
-for (const r of results) console.log(`${r.home} ${r.score[0]} - ${r.score[1]} ${r.away}  ${r.over ? '' : 'TIMEOUT'} t=${r.t.toFixed(0)}s poss=${r.poss} shots=${r.shots} dunks=${r.dunks} tricks=${r.tricks}`);
+for (const r of results) console.log(`${r.home} ${r.score[0]} - ${r.score[1]} ${r.away}  ${r.over ? '' : 'TIMEOUT'}${r.ot ? 'OT ' : ''} t=${r.t.toFixed(0)}s shots=${r.shots} saves=${r.saves} tricks=${r.tricks} hits=${r.hits} tackles=${r.tackles} volleys=${r.volleys}`);
 console.log('avg match length (game seconds):', (totalTime / n).toFixed(1));
 console.log('events:', JSON.stringify(counts));
 const unfinished = results.filter((r) => !r.over).length;
