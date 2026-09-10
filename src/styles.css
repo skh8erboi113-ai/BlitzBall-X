@@ -29,6 +29,8 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  overscroll-behavior: none; /* no pull-to-refresh while dragging the stick */
+  touch-action: manipulation;
 }
 button,
 select,
@@ -1414,5 +1416,264 @@ select {
   }
   .ts-vs {
     display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Touch controls (phones / tablets, or forced on in Settings)
+   --------------------------------------------------------------------------- */
+
+.game-canvas,
+.touch-ui {
+  touch-action: none; /* no scroll / pinch-zoom while playing */
+}
+
+.touch-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: var(--font-cond);
+}
+
+.touch-ui > * {
+  pointer-events: auto;
+}
+
+/* Left thumb: free-floating virtual stick */
+.touch-stick-zone {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 46%;
+  height: 72%;
+}
+
+.touch-stick {
+  position: absolute;
+  width: 128px;
+  height: 128px;
+  margin: -64px 0 0 -64px;
+  opacity: 0;
+  transition: opacity 0.12s;
+  left: 120px;
+  bottom: 110px;
+  top: auto;
+}
+.touch-stick.engaged {
+  opacity: 1;
+}
+.touch-stick-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  background: rgba(6, 8, 16, 0.32);
+  backdrop-filter: blur(2px);
+}
+.touch-stick-nub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--yellow, #ffd23f);
+  border: 3px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 14px rgba(255, 210, 63, 0.5);
+}
+
+/* Right thumb: action buttons */
+.touch-actions {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: 268px;
+  height: 232px;
+}
+.touch-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.35);
+  background: rgba(10, 12, 22, 0.55);
+  color: #fff;
+  font-family: var(--font-cond);
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  padding: 0;
+  transition: transform 0.06s, background 0.06s, border-color 0.06s;
+}
+.touch-btn.down {
+  transform: scale(0.92);
+  background: var(--yellow, #ffd23f);
+  color: #111;
+  border-color: #fff;
+}
+.touch-btn.shoot {
+  right: 0;
+  bottom: 0;
+  width: 104px;
+  height: 104px;
+  font-size: 18px;
+  background: rgba(255, 46, 166, 0.5);
+  border-color: var(--pink, #ff2ea6);
+}
+.touch-btn.shoot.down {
+  background: var(--pink, #ff2ea6);
+  color: #fff;
+}
+.touch-btn.turbo {
+  right: 112px;
+  bottom: 6px;
+  width: 76px;
+  height: 76px;
+}
+.touch-btn.pass {
+  right: 12px;
+  bottom: 112px;
+  width: 72px;
+  height: 72px;
+}
+.touch-btn.trick {
+  right: 100px;
+  bottom: 92px;
+  width: 68px;
+  height: 68px;
+}
+.touch-btn.hit {
+  right: 172px;
+  bottom: 122px;
+  width: 60px;
+  height: 60px;
+  font-size: 13px;
+}
+.touch-btn.breach {
+  right: 44px;
+  bottom: 190px;
+  width: 60px;
+  height: 60px;
+  font-size: 13px;
+}
+.touch-btn.swap {
+  right: 190px;
+  bottom: 34px;
+  width: 58px;
+  height: 58px;
+  font-size: 12px;
+}
+.touch-btn.gb {
+  right: 150px;
+  bottom: 186px;
+  width: 66px;
+  height: 66px;
+  font-size: 17px;
+  border-color: rgba(255, 255, 255, 0.25);
+  opacity: 0.5;
+}
+.touch-btn.gb.ready {
+  opacity: 1;
+  border-color: var(--cyan, #5cf2ff);
+  background: rgba(92, 242, 255, 0.5);
+  color: #04121a;
+  box-shadow: 0 0 20px rgba(92, 242, 255, 0.8);
+  animation: gbPulse 0.7s infinite alternate;
+}
+@keyframes gbPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.07); }
+}
+
+.touch-pause {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  top: max(14px, env(safe-area-inset-top));
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  background: rgba(10, 12, 22, 0.5);
+  color: #fff;
+  font-weight: 900;
+  font-size: 16px;
+  letter-spacing: 2px;
+  padding: 0;
+}
+.touch-pause:active {
+  background: var(--yellow, #ffd23f);
+  color: #111;
+}
+
+/* Portrait hint — the pool needs width to read. */
+.touch-rotate {
+  display: none;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(4, 5, 12, 0.92);
+  color: var(--yellow, #ffd23f);
+  font-size: 30px;
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: 1px;
+  z-index: 60;
+  pointer-events: auto;
+}
+.touch-rotate span {
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.5px;
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  .touch-rotate {
+    display: flex;
+  }
+}
+
+/* Keep the HUD clear of thumbs and safe areas on touch devices. */
+.match-wrap.touch .pcard {
+  left: max(14px, env(safe-area-inset-left));
+  bottom: auto;
+  top: max(72px, calc(env(safe-area-inset-top) + 62px));
+  transform: scale(0.85);
+  transform-origin: left top;
+}
+.match-wrap.touch .ticker {
+  bottom: auto;
+  top: max(10px, env(safe-area-inset-top));
+  max-width: 46vw;
+  font-size: 15px;
+  padding: 5px 12px;
+}
+.match-wrap.touch .hint {
+  display: none;
+}
+.match-wrap.touch .scoreboard {
+  transform: scale(0.82);
+  transform-origin: top center;
+}
+.match-wrap.touch .popups {
+  left: 46%;
+}
+
+@media (max-height: 460px) {
+  .touch-actions {
+    transform: scale(0.86);
+    transform-origin: bottom right;
+  }
+  .touch-stick {
+    transform: scale(0.86);
   }
 }

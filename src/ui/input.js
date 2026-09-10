@@ -9,6 +9,20 @@ import { emptyInput } from '../game/entities.js';
  * Gamepad:   Left stick move · RT/RB turbo · A/Cross shoot · X/Square pass ·
  *            B/Circle trick/tackle · Y/Triangle hit · LB switch · LT+RT gamebreaker · Start pause
  */
+/** One-shot input fields: true for a single fixed step, then consumed. */
+const ONE_SHOT = ['shootPressed', 'shootReleased', 'pass', 'trick', 'hit', 'breach', 'switchPlayer', 'gamebreaker'];
+
+/** Touch action name -> input field it drives. */
+const TOUCH_EDGE = {
+  shoot: 'shootPressed',
+  pass: 'pass',
+  trick: 'trick',
+  hit: 'hit',
+  breach: 'breach',
+  switch: 'switchPlayer',
+  gamebreaker: 'gamebreaker',
+};
+
 export class InputManager {
   constructor() {
     this.keys = new Set();
@@ -20,6 +34,12 @@ export class InputManager {
     this.enabled = true;
     this.lastDevice = 'keyboard';
     this.moveVec = { x: 0, z: 0 };
+    // Virtual stick / buttons (src/ui/touch.js writes here).
+    this.touch = { moveX: 0, moveZ: 0, active: false, turbo: false, shootHeld: false, edges: new Set() };
+    // One-shot actions that have not yet been consumed by a fixed simulation step. Without this
+    // latch an edge is lost whenever a rendered frame runs *no* fixed step, which is every other
+    // frame on a 120 Hz phone or 144 Hz monitor — taps and key presses would feel unresponsive.
+    this.pending = new Set();
 
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -73,6 +93,38 @@ export class InputManager {
     let switchPlayer = this.justPressed('KeyQ', 'Tab');
     let gamebreaker = this.justPressed('KeyE');
     let pause = false;
+
+    // Touch overlay
+    const t = this.touch;
+    if (t.active) {
+      mx = t.moveX;
+      mz = t.moveZ;
+      this.lastDevice = 'touch';
+    }
+    if (t.turbo) {
+      turbo = true;
+      this.lastDevice = 'touch';
+    }
+    if (t.shootHeld) {
+      shootHeld = true; // held state only; the press edge below starts the wind-up exactly once
+      this.lastDevice = 'touch';
+    }
+    for (const action of t.edges) {
+      const field = TOUCH_EDGE[action];
+      if (!field) continue;
+      this.lastDevice = 'touch';
+      if (field === 'shootPressed') shootPressed = true;
+      else if (field === 'pass') pass = true;
+      else if (field === 'trick') trick = true;
+      else if (field === 'hit') hit = true;
+      else if (field === 'breach') breach = true;
+      else if (field === 'switchPlayer') switchPlayer = true;
+      else if (field === 'gamebreaker') gamebreaker = true;
+    }
+    if (t.edges.has('shootRelease')) {
+      shootReleased = true;
+      this.lastDevice = 'touch';
+    }
 
     // Gamepad
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -132,17 +184,33 @@ export class InputManager {
     i.moveZ = mz;
     i.turbo = turbo;
     i.shoot = shootHeld;
-    i.shootPressed = shootPressed;
-    i.shootReleased = shootReleased;
     i.pass = pass;
     i.trick = trick;
     i.hit = hit;
     i.breach = breach;
     i.switchPlayer = switchPlayer;
     i.gamebreaker = gamebreaker;
+    i.shootPressed = shootPressed;
+    i.shootReleased = shootReleased;
+
+    // Latch one-shot actions until a fixed step actually consumes them (see `pending`).
+    for (const k of ONE_SHOT) {
+      if (i[k]) this.pending.add(k);
+      else if (this.pending.has(k)) i[k] = true;
+    }
+
     this.pressed.clear();
     this.released.clear();
+    t.edges.clear();
     return i;
+  }
+
+  /**
+   * Called by the frame loop once at least one fixed simulation step has consumed the current
+   * one-shot flags, so the next poll() may report them as released.
+   */
+  flushOneShots() {
+    this.pending.clear();
   }
 
   /** Menu navigation helpers (edge-triggered). */

@@ -362,6 +362,7 @@ export function SettingsScreen(app, params = {}) {
         ${row('difficulty', 'DEFAULT DIFFICULTY', 'select', Object.entries(DIFFICULTY).map(([k, v]) => [k, v.label]))}
         ${row('commentary', 'COMMENTARY', 'toggle')}
         ${row('screenShake', 'SCREEN SHAKE', 'toggle')}
+        ${row('touchControls', 'TOUCH CONTROLS', 'select', [['auto', 'AUTO (touch devices)'], ['on', 'ON'], ['off', 'OFF']])}
       </div>
       <div class="set-actions"><button class="btn danger reset-btn">RESET ALL DATA</button><button class="btn back-btn">BACK</button></div>
     </section>`);

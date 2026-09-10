@@ -75,6 +75,29 @@ export function emptyInput() {
   };
 }
 
+/**
+ * Copy the user's input into a player's own struct.
+ * Never alias the two: `updateAI` clears every field of `p.input` each tick, so a player who
+ * was controlled once and then handed to the AI would zero the live user input and silently
+ * swallow the player's one-shot actions (shoot / pass / trick / hit / breach) for the rest of
+ * the match.
+ */
+export function copyInput(dst, src) {
+  dst.moveX = src.moveX;
+  dst.moveZ = src.moveZ;
+  dst.turbo = src.turbo;
+  dst.shoot = src.shoot;
+  dst.shootPressed = src.shootPressed;
+  dst.shootReleased = src.shootReleased;
+  dst.pass = src.pass;
+  dst.trick = src.trick;
+  dst.hit = src.hit;
+  dst.breach = src.breach;
+  dst.switchPlayer = src.switchPlayer;
+  dst.gamebreaker = src.gamebreaker;
+  return dst;
+}
+
 export function createBall() {
   return {
     pos: new Vec3(0, 0, 0),
