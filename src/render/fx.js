@@ -91,13 +91,30 @@ export class FXSystem {
     }
   }
 
+  /** Underwater equivalent of dust: a cloud of small bubbles that rise. */
+  bubbles(pos, count = 8, strength = 1, y = 0.6) {
+    const c = new THREE.Color(0xdff6ff);
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = (0.4 + Math.random() * 1.2) * strength;
+      this.spawn(
+        { x: pos.x + Math.cos(a) * 0.2, y: (pos.y ?? y) + Math.random() * 0.4, z: pos.z + Math.sin(a) * 0.2 },
+        { x: Math.cos(a) * s, y: 0.8 + Math.random() * 1.2 * strength, z: Math.sin(a) * s },
+        c,
+        0.08 + Math.random() * 0.14,
+        0.6 + Math.random() * 0.5,
+        { gravity: 1.2, drag: 0.94, floor: false },
+      );
+    }
+  }
+
   burst(pos, color, count = 24, speed = 4, size = 0.22) {
     const c = new THREE.Color(color);
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const b = (Math.random() - 0.3) * Math.PI;
       const s = speed * (0.4 + Math.random() * 0.8);
-      this.spawn(pos, { x: Math.cos(a) * Math.cos(b) * s, y: Math.sin(b) * s + 1, z: Math.sin(a) * Math.cos(b) * s }, c, size * (0.6 + Math.random() * 0.8), 0.5 + Math.random() * 0.5, { gravity: -6, drag: 0.97 });
+      this.spawn(pos, { x: Math.cos(a) * Math.cos(b) * s, y: Math.sin(b) * s + 1, z: Math.sin(a) * Math.cos(b) * s }, c, size * (0.6 + Math.random() * 0.8), 0.5 + Math.random() * 0.5, { gravity: -2.5, drag: 0.96, floor: false });
     }
   }
 
@@ -106,7 +123,7 @@ export class FXSystem {
       const c = new THREE.Color(colors[i % colors.length]);
       const a = Math.random() * Math.PI * 2;
       const s = 3 + Math.random() * 6;
-      this.spawn(pos, { x: Math.cos(a) * s * 0.5, y: 5 + Math.random() * 6, z: Math.sin(a) * s * 0.5 }, c, 0.16 + Math.random() * 0.14, 2 + Math.random() * 1.5, { gravity: -3.5, drag: 0.985 });
+      this.spawn(pos, { x: Math.cos(a) * s * 0.5, y: 3 + Math.random() * 5, z: Math.sin(a) * s * 0.5 }, c, 0.16 + Math.random() * 0.14, 2 + Math.random() * 1.5, { gravity: -1.6, drag: 0.98, floor: false });
     }
   }
 
@@ -115,14 +132,15 @@ export class FXSystem {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = 2 + Math.random() * 3;
-      this.spawn(pos, { x: Math.cos(a) * s, y: Math.random() * 3, z: Math.sin(a) * s }, c, 0.1 + Math.random() * 0.1, 0.3 + Math.random() * 0.3, { gravity: -8, drag: 0.96 });
+      this.spawn(pos, { x: Math.cos(a) * s, y: Math.random() * 3, z: Math.sin(a) * s }, c, 0.1 + Math.random() * 0.1, 0.3 + Math.random() * 0.3, { gravity: -4, drag: 0.96, floor: false });
     }
   }
 
-  shockwave(pos, color = 0xffffff, maxScale = 4, life = 0.5) {
+  shockwave(pos, color = 0xffffff, maxScale = 4, life = 0.5, opts = {}) {
     const m = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
-    m.rotation.x = -Math.PI / 2;
-    m.position.set(pos.x, 0.04, pos.z);
+    if (opts.vertical) m.rotation.y = Math.PI / 2;
+    else m.rotation.x = -Math.PI / 2;
+    m.position.set(pos.x, opts.vertical ? pos.y : (pos.y ?? 0) + 0.04, pos.z);
     m.scale.setScalar(0.2);
     this.scene.add(m);
     this.rings.push({ mesh: m, life, maxLife: life, maxScale });
