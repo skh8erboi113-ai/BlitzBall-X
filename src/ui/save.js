@@ -1,7 +1,7 @@
 /**
  * Persistent state: settings, career progress, records. localStorage with a versioned schema.
  */
-const KEY = 'blitzball-x:v1';
+const KEY = 'blitzball-x:v2';
 
 export const DEFAULT_SETTINGS = {
   masterVolume: 0.8,
@@ -18,7 +18,7 @@ export function defaultState() {
     version: 1,
     settings: { ...DEFAULT_SETTINGS },
     career: null,
-    records: { wins: 0, losses: 0, styleBest: 0, gamebreakers: 0, dunks: 0, ankles: 0, bestMargin: 0 },
+    records: { wins: 0, losses: 0, styleBest: 0, gamebreakers: 0, goals: 0, saves: 0, washed: 0, bestMargin: 0 },
     unlocked: { legendMode: false },
     seenTutorial: false,
   };
