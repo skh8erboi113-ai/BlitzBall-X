@@ -1,8 +1,8 @@
 import { RULES } from '../data/constants.js';
 
 /**
- * In-match HUD: scoreboard, shot clock, gamebreaker meters, turbo bar, style popups,
- * commentary ticker, banners (GAMEBREAKER / ANKLE BREAKER / etc), controls hint.
+ * In-match HUD: scoreboard, game clock + possession clock, gamebreaker meters, turbo bar,
+ * style popups, commentary ticker, banners (GAMEBREAKER / WASHED / HUGE SAVE), controls hint.
  */
 export class HUD {
   constructor(root, sim) {
@@ -20,6 +20,8 @@ export class HUD {
       homeGbWrap: this.$('.sb-team.home .gb-meter'),
       awayGbWrap: this.$('.sb-team.away .gb-meter'),
       clock: this.$('.sb-clock'),
+      pclock: this.$('.sb-pclock'),
+      period: this.$('.sb-title'),
       clear: this.$('.sb-clear'),
       turbo: this.$('.turbo-fill'),
       turboWrap: this.$('.turbo'),
@@ -61,9 +63,10 @@ export class HUD {
           <div class="gb-meter"><div class="gb-fill"></div><span class="gb-label">GB</span></div>
         </div>
         <div class="sb-mid">
-          <div class="sb-title">FIRST TO ${RULES.targetScore}</div>
-          <div class="sb-clock">20</div>
-          <div class="sb-clear">CLEAR IT</div>
+          <div class="sb-title">1ST HALF</div>
+          <div class="sb-clock">${fmtClock(RULES.halfLength)}</div>
+          <div class="sb-pclock">${RULES.possessionClock}</div>
+          <div class="sb-clear">SHOOT IT</div>
         </div>
         <div class="sb-team away">
           <div class="sb-name">AWAY</div>
@@ -104,19 +107,33 @@ export class HUD {
       this.flashGb(team);
     });
     ev.on('gamebreaker', ({ team, player }) => this.banner('GAMEBREAKER!', player.data.signature.toUpperCase(), team, 2600, true));
-    ev.on('ankle', ({ breaker }) => this.banner('ANKLE BREAKER', '', breaker.team, 1400));
-    ev.on('block', ({ blocker }) => this.banner('REJECTED', '', blocker.team, 1100));
-    ev.on('alleyoop', ({ finisher }) => this.banner('ALLEY-OOP', '', finisher.team, 1300));
-    ev.on('score', ({ team, points, gb, stolen, player, type }) => {
-      if (gb) this.banner(`+${points}  /  -${stolen}`, 'GAMEBREAKER SLAM', team, 2400, true);
-      else if (points >= 2) this.banner('FOR TWO', '', team, 900);
+    ev.on('washed', ({ player }) => this.banner('WASHED', '', player.team, 1400));
+    ev.on('block', ({ blocker }) => this.banner('DENIED', '', blocker.team, 1100));
+    ev.on('save', ({ keeper, big }) => {
+      if (big) this.banner('HUGE SAVE', keeper.data.nick, keeper.team, 1300);
+    });
+    ev.on('bighit', ({ player, hadBall }) => {
+      if (hadBall) this.banner('BIG HIT', 'BALL LOOSE', player.team, 1200);
+    });
+    ev.on('alleyoop', ({ finisher }) => this.banner('LOB & VOLLEY', '', finisher.team, 1300));
+    ev.on('score', ({ team, points, gb, stolen, player, type, ownGoal }) => {
+      if (gb) this.banner(`+${points}  /  -${stolen}`, 'GAMEBREAKER GOAL', team, 2400, true);
+      else if (type === 'volley') this.banner('GOAL!', 'VOLLEY FINISH', team, 1600, true);
+      else if (type === 'long') this.banner('GOAL!', 'FROM DOWNTOWN', team, 1600, true);
+      else if (ownGoal) this.banner('GOAL!', 'OWN GOAL', team, 1600, true);
+      else this.banner('GOAL!', player.data.nick, team, 1500, true);
       this.pulseScore(team);
     });
+    ev.on('halftime', () => this.banner('HALFTIME', '', null, 2600, true));
+    ev.on('overtime', () => this.banner('OVERTIME', 'GOLDEN GOAL', null, 2600, true));
+    ev.on('shotclock', ({ team }) => this.banner('POSSESSION CLOCK', 'TURNOVER', 1 - team, 1500));
     ev.on('heating', ({ team }) => {
       if (this.sim.userTeam === null || team === this.sim.userTeam) this.showHeat(true);
     });
-    ev.on('turnover', ({ reason, team }) => this.banner(reason, 'TURNOVER', 1 - team, 1500));
-    ev.on('violation', ({ reason }) => this.banner(reason, 'TAKE IT BACK', null, 1200));
+    ev.on('turnover', ({ reason, team }) => {
+      if (reason !== 'POSSESSION CLOCK') this.banner(reason, 'TURNOVER', 1 - team, 1500);
+    });
+    ev.on('violation', ({ reason }) => this.banner(reason, 'RELEASE IT', null, 1200));
     ev.on('possession', ({ team }) => {
       if (this.sim.momentum[1 - team] === 0) this.showHeat(false);
     });
@@ -207,10 +224,17 @@ export class HUD {
     this.els.awayGb.style.width = `${(sim.gb[1] / max) * 100}%`;
     this.els.homeGbWrap.classList.toggle('ready', sim.gbReady[0]);
     this.els.awayGbWrap.classList.toggle('ready', sim.gbReady[1]);
-    const clock = Math.max(0, Math.ceil(sim.shotClock));
-    this.els.clock.textContent = sim.state === 'live' ? clock : '--';
-    this.els.clock.classList.toggle('urgent', clock <= 5 && sim.state === 'live');
-    this.els.clear.classList.toggle('show', sim.mustClear && sim.possession === sim.userTeam && sim.state === 'live');
+    const pclock = Math.max(0, Math.ceil(sim.possessionClock));
+    this.els.clock.textContent = sim.overtime ? fmtClock(sim.otTime) : fmtClock(sim.clock);
+    this.els.clock.classList.toggle('urgent', !sim.overtime && sim.clock <= 10 && sim.state === 'live');
+    this.els.pclock.textContent = sim.state === 'live' ? pclock : '--';
+    this.els.pclock.classList.toggle('urgent', pclock <= 5 && sim.state === 'live');
+    const period = sim.overtime ? 'OVERTIME' : sim.half === 1 ? '1ST HALF' : '2ND HALF';
+    if (this._period !== period) {
+      this._period = period;
+      this.els.period.textContent = period;
+    }
+    this.els.clear.classList.toggle('show', pclock <= 5 && sim.possession === sim.userTeam && sim.state === 'live');
     // Player card: the controlled player, or (spectating) whoever has the ball.
     const p = sim.controlled || sim.ball.holder || this._lastCard;
     if (p) {
@@ -227,4 +251,11 @@ export class HUD {
       }
     }
   }
+}
+
+function fmtClock(sec) {
+  const s = Math.max(0, Math.ceil(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
 }
